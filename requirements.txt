@@ -1,0 +1,23 @@
+# FastAPI y servidor
+fastapi==0.104.1           # Framework web moderno y rápido para APIs
+uvicorn[standard]==0.24.0  # Servidor ASGI para ejecutar FastAPI
+
+# Base de datos
+sqlalchemy==2.0.23         # ORM para interactuar con la base de datos
+psycopg2-binary==2.9.9     # Driver de PostgreSQL para Python
+alembic==1.12.1           # Migraciones de base de datos
+
+# Autenticación y seguridad
+python-jose[cryptography]==3.3.0  # Manejo de tokens JWT
+passlib[bcrypt]==1.7.4            # Hash de contraseñas con bcrypt
+bcrypt==3.2.2                     # Versión compatible para evitar warnings
+python-multipart==0.0.6           # Soporte para formularios multipart
+
+# Variables de entorno
+python-dotenv==1.0.0       # Cargar variables de entorno desde archivos .env
+
+# Validación
+email-validator==2.1.0     # Validación de emails
+
+# Utilidades
+pydantic==2.5.0           # Validación de datos y settings
