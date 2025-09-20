@@ -6,14 +6,14 @@ class Scene(Base):
     __tablename__ = "scenes"
     
     id = Column(Integer, primary_key=True, index=True)
-    scene_key = Column(String(100), unique=True, nullable=False)  # ej: "0-entrada"
-    name = Column(String(255), nullable=False)  # ej: "Entrada"
+    scene_key = Column(String(100), unique=True, nullable=False)
+    name = Column(String(255), nullable=False)
     face_size = Column(Integer, nullable=False)
     initial_yaw = Column(Float, nullable=True)
     initial_pitch = Column(Float, nullable=True)
     initial_fov = Column(Float, nullable=True)
     
-    # Relaciones
+    # Relaciones (usando string references)
     link_hotspots = relationship("LinkHotspot", back_populates="scene")
     info_hotspots = relationship("InfoHotspot", back_populates="scene")
     levels = relationship("SceneLevel", back_populates="scene")
@@ -25,7 +25,7 @@ class LinkHotspot(Base):
     yaw = Column(Float, nullable=False)
     pitch = Column(Float, nullable=False)
     rotation = Column(Float, nullable=True)
-    target_scene_id = Column(String(100), nullable=False)  # referencia a otra escena
+    target_scene_id = Column(String(100), nullable=False)
     scene_id = Column(Integer, ForeignKey("scenes.id"))
     
     scene = relationship("Scene", back_populates="link_hotspots")

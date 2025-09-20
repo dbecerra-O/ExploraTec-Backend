@@ -27,7 +27,6 @@ ENV/
 
 # --- Variables de entorno ---
 .env
-.env.*
 !.env.example   # <-- permite subir un ejemplo sin credenciales reales
 
 # --- IDEs / Editores ---

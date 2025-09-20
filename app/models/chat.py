@@ -8,13 +8,13 @@ class Conversation(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    title = Column(String(255), nullable=True)  # Título generado automáticamente o definido por el usuario
-    scene_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)  # Escena donde se inició la conversación
-    is_active = Column(Boolean, default=True)  # Si la conversación está activa
+    title = Column(String(255), nullable=True)
+    scene_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relaciones
+    # Relaciones (usando string references)
     user = relationship("User", back_populates="conversations")
     scene = relationship("Scene")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
@@ -29,11 +29,11 @@ class Message(Base):
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     content = Column(Text, nullable=False)
     is_from_user = Column(Boolean, nullable=False, default=True)  # True = usuario, False = asistente
-    scene_context_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)  # Escena donde se envió el mensaje
-    tokens_used = Column(Integer, nullable=True)  # Para tracking de uso de API
+    scene_context_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)
+    tokens_used = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relaciones
+    # Relaciones (usando string references)
     conversation = relationship("Conversation", back_populates="messages")
     scene_context = relationship("Scene")
     feedback = relationship("MessageFeedback", back_populates="message", uselist=False)
@@ -49,11 +49,11 @@ class MessageFeedback(Base):
     message_id = Column(Integer, ForeignKey("messages.id"), nullable=False, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_positive = Column(Boolean, nullable=False)  # True = like, False = dislike
-    comment = Column(Text, nullable=True)  # Comentario opcional del usuario
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relaciones
+    # Relaciones (usando string references)
     message = relationship("Message", back_populates="feedback")
     user = relationship("User")
     
