@@ -16,13 +16,13 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 def drop_all_tables():
-    """Eliminar todas las tablas de forma más simple"""
+    """Eliminar todas las tablas"""
     try:
         Base.metadata.drop_all(bind=engine, checkfirst=True)
         logger.info("Tablas eliminadas correctamente")
     except Exception as e:
         logger.error(f"Error eliminando tablas: {e}")
-        # Intentar método alternativo si falla el primero
+        # Intentar eliminar las tablas si falla el primero
         try:
             with engine.connect() as conn:
                 # Obtener todas las tablas y eliminarlas una por una
@@ -38,9 +38,9 @@ def drop_all_tables():
                     conn.execute(text(f'DROP TABLE IF EXISTS "{table}" CASCADE'))
                 
                 conn.commit()
-                logger.info("Tablas eliminadas con método alternativo")
+                logger.info("Tablas eliminadas")
         except Exception as e2:
-            logger.error(f"Error con método alternativo: {e2}")
+            logger.error(f"Error: {e2}")
             raise
 
 # Dependency para obtener la sesión de la base de datos

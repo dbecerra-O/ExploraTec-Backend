@@ -46,31 +46,6 @@ async def create_user(
     db_user = user_crud.create_user(db=db, user=user)
     return db_user
 
-@router.post("/users/admin", response_model=UserSchema)
-async def create_admin_user(
-    user: UserCreate,
-    current_admin: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """Crea un nuevo usuario administrador (solo admin)"""
-    
-    # Verificar si el usuario ya existe
-    if user_crud.get_user_by_email(db, email=user.email):
-        raise HTTPException(
-            status_code=400,
-            detail="El email ya está registrado"
-        )
-    
-    if user_crud.get_user_by_username(db, username=user.username):
-        raise HTTPException(
-            status_code=400,
-            detail="El username ya está en uso"
-        )
-    
-    # Crear el usuario administrador
-    db_user = user_crud.create_admin_user(db=db, user=user)
-    return db_user
-
 @router.get("/users/{user_id}", response_model=UserSchema)
 async def read_user(
     user_id: int,

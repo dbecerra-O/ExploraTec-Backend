@@ -6,7 +6,7 @@ import logging
 from app.routers.auth import router as auth_router
 from app.routers.users import router as users_router  
 from app.routers.admin import router as admin_router
-from app.routers.scenes import router as scenes_router
+from app.routers.chatbot import router as chatbot_router
 from app.routers.user_scenes import router as user_scenes_router
 from app.dependencies import get_current_active_user, get_current_admin_user
 from app.models.user import User
@@ -34,8 +34,8 @@ async def lifespan(app: FastAPI):
 
 # Crear la aplicación FastAPI
 app = FastAPI(
-    title="FastAPI JWT Auth System",
-    description="Sistema de autenticación con JWT para usuarios y administradores",
+    title="FastAPI ExploraTec Back",
+    description="Sistema chatbot para el Tour Virtual 360° de Tecsup",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -53,7 +53,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
-app.include_router(scenes_router)
+app.include_router(chatbot_router)
 app.include_router(user_scenes_router)
 
 # Rutas de ejemplo para probar la autenticación
