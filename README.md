@@ -2,19 +2,6 @@
 
 Sistema completo de autenticación con JWT usando FastAPI, SQLAlchemy, PostgreSQL y bcrypt.
 
-## 🚀 Características
-
-- ✅ Autenticación JWT completa
-- ✅ Registro y login de usuarios
-- ✅ Roles de usuario (Usuario normal y Administrador)
-- ✅ Rutas protegidas por autenticación
-- ✅ Rutas exclusivas para administradores
-- ✅ Base de datos PostgreSQL (Neon)
-- ✅ Seeder automático que se ejecuta al iniciar
-- ✅ Hash seguro de contraseñas con bcrypt
-- ✅ Validación de datos con Pydantic
-- ✅ Documentación automática con Swagger
-
 ## 📁 Estructura del Proyecto
 
 ```
@@ -25,14 +12,22 @@ my_fastapi_app/
 │   ├── database.py          # Configuración de BD
 │   ├── dependencies.py      # Dependencias de autenticación
 │   ├── models/
+│   │   ├── chat.py          # Modelo de chat
+│   │   ├── scene.py         # Modelo de scene
 │   │   └── user.py          # Modelo de usuario
 │   ├── schemas/
 │   │   ├── user.py          # Esquemas de usuario
+│   │   ├── scene.py         # Esquemas de escena
+│   │   ├── chat.py          # Esquemas de chat
 │   │   └── token.py         # Esquemas de token
 │   ├── crud/
-│   │   └── user.py          # Operaciones CRUD
+│   │   ├── user.py          # Operaciones CRUD de user
+│   │   ├── chat.py          # Operaciones CRUD de chat
+│   │   └── scene.py          # Operaciones CRUD de scene
 │   ├── routers/
 │   │   ├── auth.py          # Autenticación
+│   │   ├── chatbot.py       # Rutas de chatbot
+│   │   ├── user_scenes.py   # Rutas de escenas de usuario
 │   │   ├── users.py         # Rutas de usuarios
 │   │   └── admin.py         # Rutas de administrador
 │   ├── core/
@@ -40,6 +35,7 @@ my_fastapi_app/
 │   └── utils/
 │       └── seeder.py        # Datos de prueba
 ├── .env                     # Variables de entorno
+├── .env.example             # Variables de entorno de ejemplo
 ├── requirements.txt         # Dependencias
 └── README.md
 ```
@@ -90,16 +86,15 @@ El seeder crea automáticamente estos usuarios:
 
 ### Administrador
 - **Username**: `admin`
-- **Email**: `admin@example.com`
+- **Email**: `admin@tecsup.edu.pe`
 - **Password**: `admin123`
 - **Rol**: Administrador
 
-### Usuarios Normales
-- **Username**: `juan123` | **Email**: `juan@example.com` | **Password**: `password123`
-- **Username**: `maria456` | **Email**: `maria@example.com` | **Password**: `password123`
-- **Username**: `carlos789` | **Email**: `carlos@example.com` | **Password**: `password123` (inactivo)
-- **Username**: `ana101` | **Email**: `ana@example.com` | **Password**: `password123`
-- **Username**: `luis202` | **Email**: `luis@example.com` | **Password**: `password123`
+### Administrador
+- **Username**: `estudiante`
+- **Email**: `estudiante@tecsup.edu.pe`
+- **Password**: `student123`
+- **Rol**: Usuario
 
 ## 🛠️ Endpoints Principales
 
@@ -127,45 +122,13 @@ El seeder crea automáticamente estos usuarios:
 - `GET /admin-only` - Solo administradores
 - `GET /health` - Estado de la aplicación
 
-## 🔧 Uso de la API
-
-### 1. Registrar un usuario
-
-```bash
-curl -X POST "http://localhost:8000/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "nuevo@example.com",
-    "username": "nuevo_usuario",
-    "password": "mi_password"
-  }'
-```
-
-### 2. Iniciar sesión
-
-```bash
-curl -X POST "http://localhost:8000/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "admin",
-    "password": "admin123"
-  }'
-```
-
-### 3. Usar el token en rutas protegidas
-
-```bash
-curl -X GET "http://localhost:8000/users/me" \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-```
-
 ## 🔄 Seeder Automático
 
 La aplicación incluye un seeder que:
 - Se ejecuta automáticamente al iniciar la aplicación
 - Elimina todas las tablas existentes
 - Crea las tablas nuevamente
-- Inserta usuarios de prueba
+- Inserta datos de prueba
 
 Esto significa que **cada vez que reinicies la aplicación, la base de datos se resetea** con los datos de prueba.
 
@@ -183,9 +146,13 @@ Esto significa que **cada vez que reinicies la aplicación, la base de datos se 
 
 En `.env`:
 ```env
+DATABASE_URL=URL_DB
 SECRET_KEY=tu-nueva-clave-super-secreta
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+OPENAI_API_KEY=API_KEY
+GROQ_API_KEY=API_KEY  
+ANTHROPIC_API_KEY=API_KEY
 ```
 
 ### Desactivar el seeder automático
