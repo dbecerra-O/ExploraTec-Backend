@@ -47,16 +47,3 @@ async def update_users_me(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
     return updated_user
-
-@router.get("/profile/{user_id}", response_model=UserSchema)
-async def read_user_profile(
-    user_id: int,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
-):
-    """Obtiene el perfil público de un usuario"""
-    user = user_crud.get_user(db, user_id=user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    
-    return user
