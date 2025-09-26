@@ -156,7 +156,7 @@ class ChatStatsCRUD:
         
         # Estadísticas básicas
         total_conversations = db.query(Conversation).count()
-        total_messages = db.query(Message).count()
+        total_messages = db.query(Message).where(Message.is_from_user == True).count()
         active_conversations = db.query(Conversation).filter(Conversation.is_active == True).count()
         total_feedbacks = db.query(MessageFeedback).count()
         positive_feedbacks = db.query(MessageFeedback).filter(MessageFeedback.is_positive == True).count()
