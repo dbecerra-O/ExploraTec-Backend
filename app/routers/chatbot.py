@@ -212,6 +212,31 @@ def generate_predefined_response(user_message: str) -> str:
     
     return "Gracias por tu mensaje. ¿En qué puedo ayudarte con información sobre Tecsup?"
 
+def generate_conversation_title(user_message: str) -> str:
+    """
+    Genera un título corto para la conversación usando IA
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1"
+    )
+
+    system_prompt = """Genera un título breve y descriptivo en español para esta conversación.
+    Debe ser conciso (máximo 6 a 10 palabras) y relacionado con el mensaje del usuario.
+    No incluyas comillas ni símbolos raros, solo texto simple."""
+
+    response = client.chat.completions.create(
+        model="deepseek/deepseek-chat-v3.1:free",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message}
+        ],
+        max_tokens=20,
+        temperature=0.5
+    )
+
+    return response.choices[0].message.content.strip()
 
 # API ENDPOINTS
 @router.post("/message", response_model=ChatResponse)
@@ -244,8 +269,11 @@ async def send_message(
             raise HTTPException(status_code=404, detail="Conversación no encontrada")
     else:
         # Crear nueva conversación automáticamente
+        
+        auto_title = generate_conversation_title(message.content) #Crear titulo automaticamente
+
         conversation_data = ConversationCreate(
-            title=f"Conversación - {current_user.username}",
+            title=auto_title,
             scene_id=message.scene_context_id,
             is_active=True
         )
