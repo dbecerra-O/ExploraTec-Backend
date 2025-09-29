@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import desc
 from typing import List, Dict
 import openai
 import httpx
@@ -17,6 +18,7 @@ from app.crud.chat import conversation_crud, message_crud, feedback_crud, stats_
 from app.crud.scene import scene_crud
 from app.models.user import User
 from app.models.chat import Conversation, Message
+from app.services.intent_detector import IntentDetector
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
@@ -27,12 +29,10 @@ def generate_ai_response(user_message: str, scene_context: str = None, conversat
     """
     
     try:
-        if os.getenv("OPENAI_API_KEY"):
-            return generate_openai_response(user_message, scene_context, conversation_history)
+        if os.getenv("OPENROUTER_API_KEY"):
+            return generate_openrouter_response(user_message, scene_context, conversation_history)
         elif os.getenv("GROQ_API_KEY"):
             return generate_groq_response(user_message, scene_context, conversation_history)
-        elif os.getenv("ANTHROPIC_API_KEY"):
-            return generate_claude_response(user_message, scene_context, conversation_history)
         else:
             return generate_predefined_response(user_message)
             
@@ -40,42 +40,85 @@ def generate_ai_response(user_message: str, scene_context: str = None, conversat
         print(f"Error con API de IA: {e}")
         return generate_predefined_response(user_message)
 
-def generate_openai_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
-    """Generar respuesta usando OpenAI GPT"""
+def generate_openrouter_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
+    """
+    Generar respuesta usando OpenRouter
+    """
     
-    openai.api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        raise Exception("OPENROUTER_API_KEY no encontrada en las variables de entorno")
     
+    # Configurar cliente
+    client = openai.OpenAI(
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1"
+    )
+    
+    # System prompt específico para Tecsup
     system_prompt = """Eres un asistente virtual de Tecsup, una institución de educación técnica en Perú.
     Tu objetivo es ayudar a los usuarios con información sobre:
     - Carreras técnicas (ingeniería, tecnología, gestión)
     - Proceso de admisión y requisitos
     - Instalaciones del campus (laboratorios, biblioteca, deportes)
     - Vida estudiantil y servicios
+    - Horarios y calendario académico
+    - Becas y financiamiento
 
-    Responde de manera amigable, informativa y concisa. Si no tienes información específica, 
-    ofrece ayuda general y sugiere contactar a la administración."""
+    Responde de manera amigable, informativa y concisa siempre en español, sin importar el idioma en que el usuario escriba. 
+    Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."""
 
     if scene_context:
-        system_prompt += f"\n\nEl usuario está actualmente en: {scene_context}. Puedes hacer referencia a esta ubicación si es relevante."
+        system_prompt += f"\n\nContexto adicional: El usuario está actualmente en {scene_context}. Puedes hacer referencia a esta ubicación si es relevante para tu respuesta."
 
+    # Preparar mensajes
     messages = [{"role": "system", "content": system_prompt}]
     
+    # Agregar historial de conversación (últimos 3 mensajes para mantener contexto)
     if conversation_history:
-        for msg in conversation_history[-3:]:  # Últimos 3 mensajes
-            role = "user" if msg.get("is_from_user") else "assistant"
-            messages.append({"role": role, "content": msg.get("content", "")})
+        for msg in conversation_history[-3:]:
+            if msg.get("content") and msg.get("content").strip():
+                role = "user" if msg.get("is_from_user") else "assistant"
+                messages.append({"role": role, "content": msg.get("content")})
+    
+    # Agregar mensaje actual del usuario
     messages.append({"role": "user", "content": user_message})
     
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=messages,
-            max_tokens=200,
-            temperature=0.7
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        raise Exception(f"Error OpenAI: {e}")
+    # Lista de modelos para intentar (orden de preferencia)
+    models_to_try = [
+        "deepseek/deepseek-chat-v3.1:free",
+        "meta-llama/llama-3.2-11b-vision:free",
+        "google/gemini-flash-1.5:free",
+        "deepseek/deepseek-chat-v3.1",
+        "openai/gpt-3.5-turbo",
+    ]
+    
+    for model in models_to_try:
+        try:
+            print(f"Intentando con modelo: {model}")
+            
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=250,
+                temperature=0.7,
+                extra_headers={
+                    "HTTP-Referer": "https://tecsup.edu.pe",  # Tu sitio web
+                    "X-Title": "Tecsup Virtual Assistant",    # Nombre de tu aplicación
+                }
+            )
+            
+            result = response.choices[0].message.content.strip()
+            total_tokens = response.usage.total_tokens
+            print(f"✓ Respuesta exitosa con modelo: {model}")
+            return result, total_tokens
+            
+        except Exception as model_error:
+            print(f"✗ Error con modelo {model}: {model_error}")
+            continue
+    
+    # Si todos los modelos fallan
+    raise Exception("Todos los modelos de OpenRouter fallaron")
 
 def generate_groq_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
     """Generar respuesta usando Groq API"""
@@ -131,48 +174,6 @@ def generate_groq_response(user_message: str, scene_context: str = None, convers
     except Exception as e:
         raise Exception(f"Error Groq: {e}")
 
-def generate_claude_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
-    """Generar respuesta usando Claude API de Anthropic"""
-    
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    url = "https://api.anthropic.com/v1/messages"
-    
-    system_prompt = """Eres un asistente virtual de Tecsup, institución técnica de Perú. 
-    Ayuda con información sobre carreras, admisiones, instalaciones y servicios estudiantiles."""
-    
-    if scene_context:
-        system_prompt += f" Usuario ubicado en: {scene_context}."
-    
-    conversation_context = ""
-    if conversation_history:
-        for msg in conversation_history[-3:]:
-            role = "Usuario" if msg.get("is_from_user") else "Asistente"
-            conversation_context += f"{role}: {msg.get('content', '')}\n"
-    
-    prompt = f"{conversation_context}Usuario: {user_message}\nAsistente:"
-    
-    headers = {
-        "x-api-key": api_key,
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01"
-    }
-    
-    data = {
-        "model": "claude-3-haiku-20240307",
-        "max_tokens": 150,
-        "system": system_prompt,
-        "messages": [{"role": "user", "content": prompt}]
-    }
-    
-    try:
-        with httpx.Client() as client:
-            response = client.post(url, headers=headers, json=data, timeout=15.0)
-            response.raise_for_status()
-            result = response.json()
-            return result["content"][0]["text"].strip()
-    except Exception as e:
-        raise Exception(f"Error Claude: {e}")
-
 def generate_predefined_response(user_message: str) -> str:
     """Respuestas predefinidas como fallback cuando no hay API de IA configurada"""
     
@@ -224,6 +225,15 @@ async def send_message(
     Crea conversación automáticamente si no existe una.
     """
     
+    # 🔹 Validar que el mensaje no exceda 500 caracteres
+    if len(message.content) > 500:
+        raise HTTPException(
+            status_code=400,
+            detail="El mensaje no puede superar los 500 caracteres"
+        )
+        
+    intent_result = IntentDetector.detect_intent(message.content)
+    
     conversation = None
     is_new_conversation = False
     
@@ -243,9 +253,47 @@ async def send_message(
         is_new_conversation = True
     
     # Crear mensaje del usuario
-    user_message = message_crud.create_user_message(
-        db, message.content, conversation.id, message.scene_context_id
+    user_message = message_crud.create_user_message_with_intent(
+        db=db,
+        content=message.content,
+        conversation_id=conversation.id,
+        scene_context_id=message.scene_context_id,
+        intent_category=intent_result["category"],
+        intent_confidence=intent_result["confidence"],
+        intent_keywords=intent_result["keywords_found"],
+        requires_clarification=intent_result["requires_clarification"]
     )
+    
+    scene_context = None
+    if message.scene_context_id:
+        scene = scene_crud.get_scene(db, message.scene_context_id)
+        scene_context = scene.name if scene else None
+    
+    if intent_result["requires_clarification"]:
+        clarification_msg = IntentDetector.get_clarification_message(
+            intent_result["all_matches"]
+        )
+        
+        assistant_message = message_crud.create_assistant_message(
+            db, clarification_msg, conversation.id, None
+        )
+        
+        conversation_simple = ConversationSimple(
+            id=conversation.id,
+            title=conversation.title,
+            scene_id=conversation.scene_id,
+            is_active=conversation.is_active,
+            user_id=conversation.user_id,
+            created_at=conversation.created_at,
+            updated_at=conversation.updated_at
+        )
+        
+        return ChatResponse(
+            user_message=user_message,
+            assistant_message=assistant_message,
+            conversation=conversation_simple,
+            is_new_conversation=is_new_conversation
+        )
     
     # Obtener historial para contexto de IA
     conversation_messages = message_crud.get_conversation_messages(db, conversation.id)
@@ -258,22 +306,16 @@ async def send_message(
         for msg in conversation_messages
     ]
     
-    # Obtener contexto de escena
-    scene_context = None
-    if message.scene_context_id:
-        scene = scene_crud.get_scene(db, message.scene_context_id)
-        scene_context = scene.name if scene else None
-    
     # Generar respuesta con IA
-    bot_response = generate_ai_response(
+    bot_response, tokens_used = generate_ai_response(
         user_message=message.content,
         scene_context=scene_context,
         conversation_history=conversation_history
     )
     
-    # Crear mensaje del asistente (scene_context_id = None como solicitaste)
+    # Crear mensaje del asistente
     assistant_message = message_crud.create_assistant_message(
-        db, bot_response, conversation.id, None
+        db, bot_response, conversation.id, None, tokens_used
     )
     
     # Actualizar timestamp de conversación
@@ -457,10 +499,98 @@ async def get_chat_analytics(
         "top_active_users": [
             {
                 "username": user.username,
-                "full_name": user.full_name,
                 "conversations": user.conversations,
                 "messages": user.messages
             }
             for user in top_users
+        ]
+    }
+
+@router.get("/admin/intents/ambiguous")
+async def get_ambiguous_queries(
+    limit: int = 20,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Obtener consultas ambiguas que requirieron clarificación"""
+    
+    ambiguous_messages = message_crud.get_ambiguous_messages(db, skip=0, limit=limit)
+    
+    total_ambiguous = db.query(Message).filter(
+        Message.requires_clarification == True,
+        Message.is_from_user == True
+    ).count()
+    
+    return {
+        "total_ambiguous": total_ambiguous,
+        "showing": len(ambiguous_messages),
+        "examples": [
+            {
+                "id": msg.id,
+                "content": msg.content,
+                "detected_category": msg.intent_category,
+                "confidence": msg.intent_confidence,
+                "keywords": msg.intent_keywords,
+                "created_at": msg.created_at
+            }
+            for msg in ambiguous_messages
+        ]
+    }
+
+@router.get("/admin/intents/by-category/{category}")
+async def get_messages_by_intent_category(
+    category: str,
+    limit: int = 50,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Obtener mensajes filtrados por categoría de intención"""
+    
+    messages = message_crud.get_messages_by_intent(db, category, skip=0, limit=limit)
+    
+    return {
+        "category": category,
+        "total_found": len(messages),
+        "messages": [
+            {
+                "id": msg.id,
+                "content": msg.content,
+                "confidence": msg.intent_confidence,
+                "keywords": msg.intent_keywords,
+                "scene_context_id": msg.scene_context_id,
+                "created_at": msg.created_at
+            }
+            for msg in messages
+        ]
+    }
+
+@router.get("/admin/intents/low-confidence")
+async def get_low_confidence_intents(
+    threshold: float = 0.6,
+    limit: int = 20,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Obtener mensajes con baja confianza en detección"""
+    
+    low_confidence_messages = db.query(Message).filter(
+        Message.is_from_user == True,
+        Message.intent_confidence < threshold,
+        Message.intent_confidence.isnot(None)
+    ).order_by(desc(Message.created_at)).limit(limit).all()
+    
+    return {
+        "threshold": threshold,
+        "total_found": len(low_confidence_messages),
+        "messages": [
+            {
+                "id": msg.id,
+                "content": msg.content,
+                "detected_category": msg.intent_category,
+                "confidence": msg.intent_confidence,
+                "keywords": msg.intent_keywords,
+                "created_at": msg.created_at
+            }
+            for msg in low_confidence_messages
         ]
     }

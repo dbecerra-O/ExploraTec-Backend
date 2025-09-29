@@ -5,7 +5,7 @@ from app.models.chat import Conversation, Message, MessageFeedback
 from app.models.scene import Scene
 from app.schemas.chat import (
     ConversationCreate, ConversationUpdate, MessageCreate, 
-    MessageFeedbackCreate, MessageFeedbackUpdate, ChatStats
+    MessageFeedbackCreate, MessageFeedbackUpdate, ChatStats, IntentStats
 )
 
 class ConversationCRUD:
@@ -97,6 +97,58 @@ class MessageCRUD:
         """Crea un mensaje del asistente"""
         message_data = MessageCreate(content=content, scene_context_id=scene_context_id)
         return self.create_message(db, message_data, conversation_id, False, tokens_used)  # False = es del asistente
+    
+    def create_user_message_with_intent(
+        self,
+        db: Session,
+        content: str,
+        conversation_id: int,
+        scene_context_id: Optional[int] = None,
+        intent_category: Optional[str] = None,
+        intent_confidence: Optional[float] = None,
+        intent_keywords: Optional[List[str]] = None,
+        requires_clarification: bool = False
+    ) -> Message:
+        """Crea un mensaje de usuario CON detección de intención"""
+        db_message = Message(
+            conversation_id=conversation_id,
+            content=content,
+            is_from_user=True,
+            scene_context_id=scene_context_id,
+            intent_category=intent_category,
+            intent_confidence=intent_confidence,
+            intent_keywords=intent_keywords,
+            requires_clarification=requires_clarification
+        )
+        db.add(db_message)
+        db.commit()
+        db.refresh(db_message)
+        return db_message
+    
+    def get_messages_by_intent(
+        self,
+        db: Session,
+        intent_category: str,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[Message]:
+        """Obtener mensajes filtrados por categoría de intención"""
+        return db.query(Message).filter(
+            Message.intent_category == intent_category,
+            Message.is_from_user == True
+        ).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
+    
+    def get_ambiguous_messages(
+        self,
+        db: Session,
+        skip: int = 0,
+        limit: int = 100
+    ) -> List[Message]:
+        """Obtener mensajes que requirieron clarificación"""
+        return db.query(Message).filter(
+            Message.requires_clarification == True,
+            Message.is_from_user == True
+        ).order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
 
 class MessageFeedbackCRUD:
     def get_message_feedback(self, db: Session, message_id: int) -> Optional[MessageFeedback]:
@@ -179,6 +231,31 @@ class ChatStatsCRUD:
             for scene_name, count in most_active_scenes
         ]
         
+        intent_counts = db.query(
+            Message.intent_category,
+            func.count(Message.id).label('count'),
+            func.avg(Message.intent_confidence).label('avg_confidence')
+        ).filter(
+            Message.is_from_user == True,
+            Message.intent_category.isnot(None)
+        ).group_by(
+            Message.intent_category
+        ).order_by(
+            func.count(Message.id).desc()
+        ).all()
+        
+        total_with_intent = sum(item.count for item in intent_counts)
+        
+        intent_distribution = [
+            IntentStats(
+                category=item.intent_category,
+                count=item.count,
+                percentage=round((item.count / total_with_intent * 100), 2) if total_with_intent > 0 else 0,
+                avg_confidence=round(item.avg_confidence, 2) if item.avg_confidence else 0
+            )
+            for item in intent_counts
+        ]
+        
         return ChatStats(
             total_conversations=total_conversations,
             total_messages=total_messages,
@@ -186,7 +263,8 @@ class ChatStatsCRUD:
             total_feedbacks=total_feedbacks,
             positive_feedbacks=positive_feedbacks,
             negative_feedbacks=negative_feedbacks,
-            most_active_scenes=most_active_scenes_list
+            most_active_scenes=most_active_scenes_list,
+            intent_distribution=intent_distribution
         )
 
 # Instancias de los CRUD

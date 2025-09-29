@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Float, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -32,6 +32,10 @@ class Message(Base):
     scene_context_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)
     tokens_used = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    intent_category = Column(String(50), nullable=True)  # "navegacion", "eventos", "carreras", etc.
+    intent_confidence = Column(Float, nullable=True)  # 0.0 a 1.0
+    intent_keywords = Column(JSON, nullable=True)  # Lista de palabras clave encontradas
+    requires_clarification = Column(Boolean, default=False)  # Si necesita aclaración
     
     # Relaciones (usando string references)
     conversation = relationship("Conversation", back_populates="messages")

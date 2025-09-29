@@ -43,6 +43,10 @@ class Message(MessageBase):
     tokens_used: Optional[int] = None
     created_at: datetime
     feedback: Optional[MessageFeedback] = None
+    intent_category: Optional[str] = None
+    intent_confidence: Optional[float] = None
+    intent_keywords: Optional[List[str]] = None
+    requires_clarification: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -92,8 +96,14 @@ class ChatResponse(BaseModel):
     assistant_message: Message
     conversation: ConversationSimple
     is_new_conversation: bool = False
+    
+class IntentStats(BaseModel):
+    category: str
+    count: int
+    percentage: float
+    avg_confidence: float
 
-# Schema para estadísticas del chatbot (admin)
+# Schema para estadísticas del chatbot
 class ChatStats(BaseModel):
     total_conversations: int
     total_messages: int
@@ -101,4 +111,4 @@ class ChatStats(BaseModel):
     total_feedbacks: int
     positive_feedbacks: int
     negative_feedbacks: int
-    most_active_scenes: List[dict] = []  # [{"scene_name": str, "message_count": int}]
+    intent_distribution: Optional[List[IntentStats]] = []
