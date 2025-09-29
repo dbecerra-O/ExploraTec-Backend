@@ -239,7 +239,7 @@ def generate_conversation_title(user_message: str) -> str:
     return response.choices[0].message.content.strip()
 
 # API ENDPOINTS
-@router.post("/message", response_model=ChatResponse)
+@router.post("/message", response_model=ChatResponse, response_model_exclude_none=True)
 async def send_message(
     message: ChatMessage,
     current_user: User = Depends(get_current_active_user),
@@ -269,7 +269,6 @@ async def send_message(
             raise HTTPException(status_code=404, detail="Conversación no encontrada")
     else:
         # Crear nueva conversación automáticamente
-        
         auto_title = generate_conversation_title(message.content) #Crear titulo automaticamente
 
         conversation_data = ConversationCreate(

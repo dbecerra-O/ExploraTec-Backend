@@ -50,6 +50,7 @@ class Message(MessageBase):
 
     class Config:
         from_attributes = True
+        orm_mode = True
 
 # Schema para Conversation
 class ConversationBase(BaseModel):
