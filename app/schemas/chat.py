@@ -67,10 +67,9 @@ class ConversationUpdate(BaseModel):
 
 class ConversationSimple(ConversationBase):
     id: int
-    user_id: int
     created_at: datetime
     updated_at: Optional[datetime] = None
-    message_count: Optional[int] = None  # Calculado dinámicamente
+    message_count: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -97,6 +96,7 @@ class ChatResponse(BaseModel):
     assistant_message: Message
     conversation: ConversationSimple
     is_new_conversation: bool = False
+    response_time_ms: Optional[int] = None
     
 class IntentStats(BaseModel):
     category: str

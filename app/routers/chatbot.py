@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List, Dict
+from typing import List, Dict, Optional
 import openai
 import os
+import time
+from datetime import datetime, timedelta
+from functools import lru_cache
+import hashlib
 
 from app.database import get_db
 from app.dependencies import get_current_active_user, get_current_admin_user
@@ -26,7 +30,68 @@ def get_openai_client():
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise Exception("OPENAI_API_KEY no encontrada en las variables de entorno")
-    return openai.OpenAI(api_key=api_key)
+    return openai.OpenAI(
+        api_key=api_key,
+        timeout=30  # Timeout razonable para evitar esperas largas
+        )
+
+def validate_message_content(content: str) -> tuple[bool, Optional[str]]:
+    """
+    Validar contenido del mensaje
+    Retorna: (es_valido, mensaje_error)
+    """
+    # Eliminar espacios en blanco
+    content = content.strip()
+    
+    # Validar mensaje vacío
+    if not content:
+        return False, "El mensaje no puede estar vacío"
+    
+    # Validar longitud mínima
+    if len(content) < 2:
+        return False, "El mensaje es demasiado corto"
+    
+    # Validar longitud máxima
+    if len(content) > 500:
+        return False, "El mensaje no puede superar los 500 caracteres"
+    
+    # Validar caracteres repetidos (posible spam)
+    if len(set(content)) < 3:
+        return False, "El mensaje parece ser spam"
+    
+    return True, None
+
+def check_rate_limit(db: Session, user_id: int) -> tuple[bool, Optional[str]]:
+    """
+    Verificar límite de mensajes por hora
+    Retorna: (permitido, mensaje_error)
+    """
+    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+    
+    recent_messages = db.query(Message).join(Conversation).filter(
+        Conversation.user_id == user_id,
+        Message.is_from_user == True,
+        Message.created_at >= one_hour_ago
+    ).count()
+    
+    if recent_messages >= 10:
+        return False, f"Has alcanzado el límite de {10} mensajes por hora. Intenta más tarde."
+    
+    return True, None
+
+def check_conversation_limit(db: Session, conversation_id: int) -> tuple[bool, Optional[str]]:
+    """
+    Verificar límite de mensajes por conversación
+    Retorna: (permitido, mensaje_error)
+    """
+    message_count = db.query(Message).filter(
+        Message.conversation_id == conversation_id
+    ).count()
+    
+    if message_count >= 5:
+        return False, f"Esta conversación ha alcanzado el límite de {5} mensajes. Crea una nueva conversación."
+    
+    return True, None
 
 def generate_ai_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> tuple:
     """
@@ -79,11 +144,22 @@ Si no tienes información específica, ofrece ayuda general y sugiere contactar 
         print(f"✓ Respuesta generada con gpt-4o-mini. Tokens usados: {total_tokens}")
         return result, total_tokens
         
+    except openai.APITimeoutError:
+        print("⏱️ Timeout en llamada a OpenAI")
+        raise HTTPException(
+            status_code=504,
+            detail="El servicio de IA está tardando mucho en responder. Por favor, intenta de nuevo."
+        )
+    except openai.RateLimitError:
+        print("🚫 Rate limit alcanzado en OpenAI")
+        raise HTTPException(
+            status_code=429,
+            detail="Demasiadas solicitudes. Por favor, espera un momento antes de intentar de nuevo."
+        )
     except Exception as e:
         error_msg = str(e)
-        print(f"❌ Error al generar respuesta con OpenAI: {error_msg}")
+        print(f"❌ Error al generar respuesta: {error_msg}")
         
-        # Mensaje de error más amigable
         if "insufficient_quota" in error_msg or "429" in error_msg:
             raise HTTPException(
                 status_code=503,
@@ -92,7 +168,7 @@ Si no tienes información específica, ofrece ayuda general y sugiere contactar 
         else:
             raise HTTPException(
                 status_code=500,
-                detail=f"Error al conectar con el servicio de IA: {error_msg}"
+                detail="Error al procesar tu solicitud. Por favor, intenta de nuevo."
             )
 
 def generate_conversation_title(message_content: str) -> str:
@@ -129,17 +205,16 @@ async def send_message(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    start_time = time.time()
+
     """
     Enviar mensaje al chatbot con IA integrada.
-    Crea conversación automáticamente si no existe una.
     """
     
-    #  Validar que el mensaje no exceda 500 caracteres
-    if len(message.content) > 500:
-        raise HTTPException(
-            status_code=400,
-            detail="El mensaje no puede superar los 500 caracteres"
-        )
+    #  Validacion de contenido
+    is_valid, error_msg = validate_message_content(message.content)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_msg)
         
     intent_result = IntentDetector.detect_intent(message.content)
     
@@ -151,6 +226,12 @@ async def send_message(
         conversation = conversation_crud.get_conversation(db, message.conversation_id)
         if not conversation or conversation.user_id != current_user.id:
             raise HTTPException(status_code=404, detail="Conversación no encontrada")
+        
+        # Verificar límite de mensajes por conversación
+        conv_limit_ok, conv_limit_msg = check_conversation_limit(db, conversation.id)
+        if not conv_limit_ok:
+            raise HTTPException(status_code=400, detail=conv_limit_msg)
+        
     else:
         # Crear nueva conversación automáticamente
         auto_title = generate_conversation_title(message.content)
@@ -166,7 +247,7 @@ async def send_message(
     # Crear mensaje del usuario
     user_message = message_crud.create_user_message_with_intent(
         db=db,
-        content=message.content,
+        content=message.content.strip(),
         conversation_id=conversation.id,
         scene_context_id=message.scene_context_id,
         intent_category=intent_result["category"],
@@ -219,7 +300,7 @@ async def send_message(
     
     # Generar respuesta con IA
     bot_response, tokens_used = generate_ai_response(
-        user_message=message.content,
+        user_message=message.content.strip(),
         scene_context=scene_context,
         conversation_history=conversation_history
     )
@@ -232,13 +313,14 @@ async def send_message(
     # Actualizar timestamp de conversación
     conversation_crud.update_conversation(db, conversation.id, ConversationUpdate())
     
+    response_time_ms = int((time.time() - start_time) * 1000)
+
     # Preparar respuesta
     conversation_simple = ConversationSimple(
         id=conversation.id,
         title=conversation.title,
         scene_id=conversation.scene_id,
         is_active=conversation.is_active,
-        user_id=conversation.user_id,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at
     )
@@ -247,7 +329,8 @@ async def send_message(
         user_message=user_message,
         assistant_message=assistant_message,
         conversation=conversation_simple,
-        is_new_conversation=is_new_conversation
+        is_new_conversation=is_new_conversation,
+        response_time_ms=response_time_ms
     )
 
 @router.get("/conversations", response_model=List[ConversationSimple])
