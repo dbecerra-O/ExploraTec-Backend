@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Dict
 import openai
-import httpx
-import random
 import os
 
 from app.database import get_db
@@ -22,221 +20,107 @@ from app.services.intent_detector import IntentDetector
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
-def generate_ai_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
-    """
-    Función que usa APIs de IA para generar respuestas inteligentes.
-    Soporta OpenAI, Groq y Claude con fallback a respuestas predefinidas.
-    """
-    
-    try:
-        if os.getenv("OPENROUTER_API_KEY"):
-            return generate_openrouter_response(user_message, scene_context, conversation_history)
-        elif os.getenv("GROQ_API_KEY"):
-            return generate_groq_response(user_message, scene_context, conversation_history)
-        else:
-            return generate_predefined_response(user_message)
-            
-    except Exception as e:
-        print(f"Error con API de IA: {e}")
-        return generate_predefined_response(user_message)
-
-def generate_openrouter_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
-    """
-    Generar respuesta usando OpenRouter
-    """
-    
-    api_key = os.getenv("OPENROUTER_API_KEY")
+# Configurar cliente OpenAI
+def get_openai_client():
+    """Obtener cliente de OpenAI configurado"""
+    api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise Exception("OPENROUTER_API_KEY no encontrada en las variables de entorno")
-    
-    # Configurar cliente
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1"
-    )
-    
-    # System prompt específico para Tecsup
-    system_prompt = """Eres un asistente virtual de Tecsup, una institución de educación técnica en Perú.
-    Tu objetivo es ayudar a los usuarios con información sobre:
-    - Carreras técnicas (ingeniería, tecnología, gestión)
-    - Proceso de admisión y requisitos
-    - Instalaciones del campus (laboratorios, biblioteca, deportes)
-    - Vida estudiantil y servicios
-    - Horarios y calendario académico
-    - Becas y financiamiento
+        raise Exception("OPENAI_API_KEY no encontrada en las variables de entorno")
+    return openai.OpenAI(api_key=api_key)
 
-    Responde de manera amigable, informativa y concisa siempre en español, sin importar el idioma en que el usuario escriba. 
-    Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."""
-
-    if scene_context:
-        system_prompt += f"\n\nContexto adicional: El usuario está actualmente en {scene_context}. Puedes hacer referencia a esta ubicación si es relevante para tu respuesta."
-
-    # Preparar mensajes
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # Agregar historial de conversación (últimos 3 mensajes para mantener contexto)
-    if conversation_history:
-        for msg in conversation_history[-3:]:
-            if msg.get("content") and msg.get("content").strip():
-                role = "user" if msg.get("is_from_user") else "assistant"
-                messages.append({"role": role, "content": msg.get("content")})
-    
-    # Agregar mensaje actual del usuario
-    messages.append({"role": "user", "content": user_message})
-    
-    # Lista de modelos para intentar (orden de preferencia)
-    models_to_try = [
-        "deepseek/deepseek-chat-v3.1:free",
-        "meta-llama/llama-3.2-11b-vision:free",
-        "google/gemini-flash-1.5:free",
-        "deepseek/deepseek-chat-v3.1",
-        "openai/gpt-3.5-turbo",
-    ]
-    
-    for model in models_to_try:
-        try:
-            print(f"Intentando con modelo: {model}")
-            
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=250,
-                temperature=0.7,
-                extra_headers={
-                    "HTTP-Referer": "https://tecsup.edu.pe",  # Tu sitio web
-                    "X-Title": "Tecsup Virtual Assistant",    # Nombre de tu aplicación
-                }
-            )
-            
-            result = response.choices[0].message.content.strip()
-            total_tokens = response.usage.total_tokens
-            print(f"✓ Respuesta exitosa con modelo: {model}")
-            return result, total_tokens
-            
-        except Exception as model_error:
-            print(f"✗ Error con modelo {model}: {model_error}")
-            continue
-    
-    # Si todos los modelos fallan
-    raise Exception("Todos los modelos de OpenRouter fallaron")
-
-def generate_groq_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> str:
-    """Generar respuesta usando Groq API"""
-    
-    api_key = os.getenv("GROQ_API_KEY")
-    url = "https://api.groq.com/openai/v1/chat/completions"
-    
-    system_prompt = """Eres un asistente virtual de Tecsup Perú. Ayudas con información sobre carreras técnicas, 
-    admisiones, instalaciones y vida estudiantil. Responde de forma amigable y concisa en español."""
-    
-    if scene_context:
-        system_prompt += f" El usuario está en: {scene_context}."
-    
-    messages = [{"role": "system", "content": system_prompt}]
-    
-    # Simplificar el historial
-    if conversation_history and len(conversation_history) > 0:
-        for msg in conversation_history[-2:]:  # Solo últimos 2 mensajes
-            if msg.get("content") and msg.get("content").strip():
-                role = "user" if msg.get("is_from_user") else "assistant"
-                messages.append({"role": role, "content": msg.get("content")})
-    
-    messages.append({"role": "user", "content": user_message})
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    data = {
-        "model": "llama-3.1-8b-instant",
-        "messages": messages,
-        "max_tokens": 150,
-        "temperature": 0.7,
-        "stream": False  # Asegurar que no sea streaming
-    }
-    
+def generate_ai_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> tuple:
+    """
+    Generar respuesta usando OpenAI GPT-4o-mini
+    Retorna: (respuesta, tokens_usados)
+    """
     try:
-        with httpx.Client(timeout=15.0) as client:  # Aumentar timeout
-            response = client.post(url, headers=headers, json=data)
-            
-            # Debug: imprimir detalles del error
-            if response.status_code != 200:
-                print(f"Error Status: {response.status_code}")
-                print(f"Error Response: {response.text}")
-                raise Exception(f"Groq API error {response.status_code}: {response.text}")
-            
-            result = response.json()
-            return result["choices"][0]["message"]["content"].strip()
-            
-    except httpx.HTTPError as e:
-        raise Exception(f"Error HTTP Groq: {e}")
+        client = get_openai_client()
+        
+        # System prompt específico para Tecsup
+        system_prompt = """Eres un asistente virtual de Tecsup, una institución de educación técnica en Perú.
+Tu objetivo es ayudar a los usuarios con información sobre:
+- Carreras técnicas
+- Proceso de admisión y requisitos
+- Instalaciones del campus (laboratorios, biblioteca, deportes)
+- Vida estudiantil y servicios
+- Horarios y calendario académico
+- Becas y financiamiento
+
+Responde de manera amigable, informativa y concisa siempre en español, sin importar el idioma en que el usuario escriba. 
+Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."""
+
+        if scene_context:
+            system_prompt += f"\n\nContexto adicional: El usuario está actualmente en {scene_context}. Puedes hacer referencia a esta ubicación si es relevante para tu respuesta."
+
+        # Preparar mensajes
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Agregar historial de conversación (últimos 3 mensajes para mantener contexto)
+        if conversation_history:
+            for msg in conversation_history[-3:]:
+                if msg.get("content") and msg.get("content").strip():
+                    role = "user" if msg.get("is_from_user") else "assistant"
+                    messages.append({"role": role, "content": msg.get("content")})
+        
+        # Agregar mensaje actual del usuario
+        messages.append({"role": "user", "content": user_message})
+        
+        # Llamar a OpenAI con gpt-4o-mini (el más económico y eficiente)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Modelo más económico: $0.15/$0.60 por 1M tokens
+            messages=messages,
+            max_tokens=300,  # Respuestas concisas pero completas
+            temperature=0.7,
+        )
+        
+        result = response.choices[0].message.content.strip()
+        total_tokens = response.usage.total_tokens
+        
+        print(f"✓ Respuesta generada con gpt-4o-mini. Tokens usados: {total_tokens}")
+        return result, total_tokens
+        
     except Exception as e:
-        raise Exception(f"Error Groq: {e}")
+        error_msg = str(e)
+        print(f"❌ Error al generar respuesta con OpenAI: {error_msg}")
+        
+        # Mensaje de error más amigable
+        if "insufficient_quota" in error_msg or "429" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="El servicio de IA temporalmente no está disponible. Por favor, intenta más tarde."
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al conectar con el servicio de IA: {error_msg}"
+            )
 
-def generate_predefined_response(user_message: str) -> str:
-    """Respuestas predefinidas como fallback cuando no hay API de IA configurada"""
-    
-    responses_by_keyword = {
-        "hola": [
-            "¡Hola! Bienvenido al tour virtual de Tecsup. ¿En qué puedo ayudarte?",
-            "¡Hola! Soy tu asistente virtual. ¿Tienes alguna pregunta sobre Tecsup?"
-        ],
-        "biblioteca": [
-            "La biblioteca de Tecsup cuenta con recursos digitales y espacios de estudio. ¿Te gustaría saber más?",
-            "Nuestra biblioteca está equipada con tecnología moderna para el aprendizaje."
-        ],
-        "laboratorio": [
-            "Los laboratorios de Tecsup tienen tecnología de última generación. ¿Qué área te interesa?",
-            "Contamos con laboratorios especializados en diferentes carreras técnicas."
-        ],
-        "carrera": [
-            "Tecsup ofrece carreras técnicas en ingeniería y tecnología. ¿Tienes alguna preferencia?",
-            "Nuestras carreras preparan profesionales técnicos altamente calificados."
-        ],
-        "admision": [
-            "El proceso de admisión incluye evaluaciones. ¿Necesitas información específica?",
-            "Para postular necesitas educación secundaria completa y aprobar nuestras evaluaciones."
-        ],
-        "gracias": [
-            "¡De nada! ¿Hay algo más en lo que pueda ayudarte?",
-            "¡Un placer ayudarte! ¿Tienes alguna otra pregunta?"
-        ]
-    }
-    
-    user_message_lower = user_message.lower()
-    
-    for keyword, responses in responses_by_keyword.items():
-        if keyword in user_message_lower:
-            return random.choice(responses)
-    
-    return "Gracias por tu mensaje. ¿En qué puedo ayudarte con información sobre Tecsup?"
+def generate_conversation_title(message_content: str) -> str:
+    """Generar título automático para la conversación usando gpt-4o-mini"""
+    try:
+        client = get_openai_client()
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Mismo modelo económico
+            messages=[
+                {"role": "system", "content": "Genera un título corto y descriptivo (máximo 6 palabras) para esta conversación en español."},
+                {"role": "user", "content": message_content}
+            ],
+            max_tokens=15,  # Títulos cortos = menos tokens
+            temperature=0.5
+        )
 
-def generate_conversation_title(user_message: str) -> str:
-    """
-    Genera un título corto para la conversación usando IA
-    """
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://openrouter.ai/api/v1"
-    )
+        if response and hasattr(response, "choices") and len(response.choices) > 0:
+            content = response.choices[0].message.content
+            return content.strip() if content else "Conversación sin título"
+        else:
+            return "Conversación sin título"
 
-    system_prompt = """Genera un título breve y descriptivo en español para esta conversación.
-    Debe ser conciso (máximo 6 a 10 palabras) y relacionado con el mensaje del usuario.
-    No incluyas comillas ni símbolos raros, solo texto simple."""
-
-    response = client.chat.completions.create(
-        model="deepseek/deepseek-chat-v3.1:free",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message}
-        ],
-        max_tokens=20,
-        temperature=0.5
-    )
-
-    return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"⚠️ Error generando título: {str(e)}")
+        # Fallback: usar primeras palabras del mensaje
+        words = message_content.split()[:4]
+        return " ".join(words) + "..." if len(words) >= 4 else message_content[:30]
 
 # API ENDPOINTS
 @router.post("/message", response_model=ChatResponse, response_model_exclude_none=True)
@@ -250,7 +134,7 @@ async def send_message(
     Crea conversación automáticamente si no existe una.
     """
     
-    # 🔹 Validar que el mensaje no exceda 500 caracteres
+    #  Validar que el mensaje no exceda 500 caracteres
     if len(message.content) > 500:
         raise HTTPException(
             status_code=400,
@@ -269,7 +153,7 @@ async def send_message(
             raise HTTPException(status_code=404, detail="Conversación no encontrada")
     else:
         # Crear nueva conversación automáticamente
-        auto_title = generate_conversation_title(message.content) #Crear titulo automaticamente
+        auto_title = generate_conversation_title(message.content)
 
         conversation_data = ConversationCreate(
             title=auto_title,
