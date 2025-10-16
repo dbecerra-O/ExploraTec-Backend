@@ -18,7 +18,7 @@ async def read_users(
     db: Session = Depends(get_db)
 ):
     """Obtiene todos los usuarios (solo admin)"""
-    users = user_crud.get_users(db, skip=skip, limit=limit)
+    users = user_crud.get_user_not_admin(db, skip=skip, limit=limit)
     return users
 
 @router.post("/users", response_model=UserSchema)

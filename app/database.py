@@ -7,7 +7,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Crear el engine de la base de datos
-engine = create_engine(settings.DATABASE_URL)
+engine = create_engine(settings.DATABASE_URL,
+                       pool_pre_ping=True,)
 
 # Crear la sesión
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -1,15 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
-from typing import List, Dict, Optional
-import openai
-import os
+from typing import List
 import time
-from datetime import datetime, timedelta
-from functools import lru_cache
-import hashlib
-
+from app.models.user import User
+from app.models.chat import Conversation, Message
 from app.database import get_db
+
+from app.services.chatbot import (
+    validate_message_content, check_rate_limit, check_conversation_limit,
+    generate_ai_response, generate_conversation_title
+)
+from app.services.intent_detector import IntentDetector
+from app.services.rag import retrieve_similar_passages, format_retrieved_passages
 from app.dependencies import get_current_active_user, get_current_admin_user
 from app.schemas.chat import (
     Conversation as ConversationSchema, ConversationSimple, ConversationCreate, ConversationUpdate,
@@ -18,185 +21,9 @@ from app.schemas.chat import (
 )
 from app.crud.chat import conversation_crud, message_crud, feedback_crud, stats_crud
 from app.crud.scene import scene_crud
-from app.models.user import User
-from app.models.chat import Conversation, Message
-from app.services.intent_detector import IntentDetector
+
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
-
-# Configurar cliente OpenAI
-def get_openai_client():
-    """Obtener cliente de OpenAI configurado"""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        raise Exception("OPENAI_API_KEY no encontrada en las variables de entorno")
-    return openai.OpenAI(
-        api_key=api_key,
-        timeout=30  # Timeout razonable para evitar esperas largas
-        )
-
-def validate_message_content(content: str) -> tuple[bool, Optional[str]]:
-    """
-    Validar contenido del mensaje
-    Retorna: (es_valido, mensaje_error)
-    """
-    # Eliminar espacios en blanco
-    content = content.strip()
-    
-    # Validar mensaje vacío
-    if not content:
-        return False, "El mensaje no puede estar vacío"
-    
-    # Validar longitud mínima
-    if len(content) < 2:
-        return False, "El mensaje es demasiado corto"
-    
-    # Validar longitud máxima
-    if len(content) > 500:
-        return False, "El mensaje no puede superar los 500 caracteres"
-    
-    # Validar caracteres repetidos (posible spam)
-    if len(set(content)) < 3:
-        return False, "El mensaje parece ser spam"
-    
-    return True, None
-
-def check_rate_limit(db: Session, user_id: int) -> tuple[bool, Optional[str]]:
-    """
-    Verificar límite de mensajes por hora
-    Retorna: (permitido, mensaje_error)
-    """
-    one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-    
-    recent_messages = db.query(Message).join(Conversation).filter(
-        Conversation.user_id == user_id,
-        Message.is_from_user == True,
-        Message.created_at >= one_hour_ago
-    ).count()
-    
-    if recent_messages >= 10:
-        return False, f"Has alcanzado el límite de {10} mensajes por hora. Intenta más tarde."
-    
-    return True, None
-
-def check_conversation_limit(db: Session, conversation_id: int) -> tuple[bool, Optional[str]]:
-    """
-    Verificar límite de mensajes por conversación
-    Retorna: (permitido, mensaje_error)
-    """
-    message_count = db.query(Message).filter(
-        Message.conversation_id == conversation_id
-    ).count()
-    
-    if message_count >= 5:
-        return False, f"Esta conversación ha alcanzado el límite de {5} mensajes. Crea una nueva conversación."
-    
-    return True, None
-
-def generate_ai_response(user_message: str, scene_context: str = None, conversation_history: List[Dict] = None) -> tuple:
-    """
-    Generar respuesta usando OpenAI GPT-4o-mini
-    Retorna: (respuesta, tokens_usados)
-    """
-    try:
-        client = get_openai_client()
-        
-        # System prompt específico para Tecsup
-        system_prompt = """Eres un asistente virtual de Tecsup, una institución de educación técnica en Perú.
-Tu objetivo es ayudar a los usuarios con información sobre:
-- Carreras técnicas
-- Proceso de admisión y requisitos
-- Instalaciones del campus (laboratorios, biblioteca, deportes)
-- Vida estudiantil y servicios
-- Horarios y calendario académico
-- Becas y financiamiento
-
-Responde de manera amigable, informativa y concisa siempre en español, sin importar el idioma en que el usuario escriba. 
-Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."""
-
-        if scene_context:
-            system_prompt += f"\n\nContexto adicional: El usuario está actualmente en {scene_context}. Puedes hacer referencia a esta ubicación si es relevante para tu respuesta."
-
-        # Preparar mensajes
-        messages = [{"role": "system", "content": system_prompt}]
-        
-        # Agregar historial de conversación (últimos 3 mensajes para mantener contexto)
-        if conversation_history:
-            for msg in conversation_history[-3:]:
-                if msg.get("content") and msg.get("content").strip():
-                    role = "user" if msg.get("is_from_user") else "assistant"
-                    messages.append({"role": role, "content": msg.get("content")})
-        
-        # Agregar mensaje actual del usuario
-        messages.append({"role": "user", "content": user_message})
-        
-        # Llamar a OpenAI con gpt-4o-mini (el más económico y eficiente)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Modelo más económico: $0.15/$0.60 por 1M tokens
-            messages=messages,
-            max_tokens=300,  # Respuestas concisas pero completas
-            temperature=0.7,
-        )
-        
-        result = response.choices[0].message.content.strip()
-        total_tokens = response.usage.total_tokens
-        
-        print(f"✓ Respuesta generada con gpt-4o-mini. Tokens usados: {total_tokens}")
-        return result, total_tokens
-        
-    except openai.APITimeoutError:
-        print("⏱️ Timeout en llamada a OpenAI")
-        raise HTTPException(
-            status_code=504,
-            detail="El servicio de IA está tardando mucho en responder. Por favor, intenta de nuevo."
-        )
-    except openai.RateLimitError:
-        print("🚫 Rate limit alcanzado en OpenAI")
-        raise HTTPException(
-            status_code=429,
-            detail="Demasiadas solicitudes. Por favor, espera un momento antes de intentar de nuevo."
-        )
-    except Exception as e:
-        error_msg = str(e)
-        print(f"❌ Error al generar respuesta: {error_msg}")
-        
-        if "insufficient_quota" in error_msg or "429" in error_msg:
-            raise HTTPException(
-                status_code=503,
-                detail="El servicio de IA temporalmente no está disponible. Por favor, intenta más tarde."
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Error al procesar tu solicitud. Por favor, intenta de nuevo."
-            )
-
-def generate_conversation_title(message_content: str) -> str:
-    """Generar título automático para la conversación usando gpt-4o-mini"""
-    try:
-        client = get_openai_client()
-        
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Mismo modelo económico
-            messages=[
-                {"role": "system", "content": "Genera un título corto y descriptivo (máximo 6 palabras) para esta conversación en español."},
-                {"role": "user", "content": message_content}
-            ],
-            max_tokens=15,  # Títulos cortos = menos tokens
-            temperature=0.5
-        )
-
-        if response and hasattr(response, "choices") and len(response.choices) > 0:
-            content = response.choices[0].message.content
-            return content.strip() if content else "Conversación sin título"
-        else:
-            return "Conversación sin título"
-
-    except Exception as e:
-        print(f"⚠️ Error generando título: {str(e)}")
-        # Fallback: usar primeras palabras del mensaje
-        words = message_content.split()[:4]
-        return " ".join(words) + "..." if len(words) >= 4 else message_content[:30]
 
 # API ENDPOINTS
 @router.post("/message", response_model=ChatResponse, response_model_exclude_none=True)
@@ -215,6 +42,10 @@ async def send_message(
     is_valid, error_msg = validate_message_content(message.content)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_msg)
+    
+    rate_ok, rate_msg = check_rate_limit(db, current_user.id)
+    if not rate_ok:
+        raise HTTPException(status_code=429, detail=rate_msg)
         
     intent_result = IntentDetector.detect_intent(message.content)
     
@@ -298,11 +129,22 @@ async def send_message(
         for msg in conversation_messages
     ]
     
-    # Generar respuesta con IA
+    # Recuperación RAG: buscar pasajes relevantes en la base de conocimiento
+    try:
+        passages = retrieve_similar_passages(db, message.content.strip(), top_k=4, scene_id=message.scene_context_id)
+        retrieved_context = format_retrieved_passages(passages)
+    except Exception as e:
+        # Si falla la recuperación, continuamos sin contexto pero lo registramos
+        print(f"⚠️ Error en RAG retrieval: {e}")
+        db.rollback()
+        retrieved_context = None
+
+    # Generar respuesta con IA (incluyendo contexto recuperado si existe)
     bot_response, tokens_used = generate_ai_response(
         user_message=message.content.strip(),
         scene_context=scene_context,
-        conversation_history=conversation_history
+        conversation_history=conversation_history,
+        retrieved_context=retrieved_context
     )
     
     # Crear mensaje del asistente

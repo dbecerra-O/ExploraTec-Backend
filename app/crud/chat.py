@@ -163,15 +163,13 @@ class MessageFeedbackCRUD:
         if existing_feedback:
             # Actualizar feedback existente
             return self.update_feedback(db, message_id, MessageFeedbackUpdate(
-                is_positive=feedback.is_positive,
-                comment=feedback.comment
+                is_positive=feedback.is_positive
             ))
         
         db_feedback = MessageFeedback(
             message_id=message_id,
             user_id=user_id,
-            is_positive=feedback.is_positive,
-            comment=feedback.comment
+            is_positive=feedback.is_positive
         )
         db.add(db_feedback)
         db.commit()

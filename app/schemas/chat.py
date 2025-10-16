@@ -5,14 +5,12 @@ from datetime import datetime
 # Schema para MessageFeedback
 class MessageFeedbackBase(BaseModel):
     is_positive: bool  # True = like, False = dislike
-    comment: Optional[str] = None
 
 class MessageFeedbackCreate(MessageFeedbackBase):
     pass
 
 class MessageFeedbackUpdate(BaseModel):
     is_positive: Optional[bool] = None
-    comment: Optional[str] = None
 
 class MessageFeedback(MessageFeedbackBase):
     id: int

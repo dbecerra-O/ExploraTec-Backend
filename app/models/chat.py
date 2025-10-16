@@ -53,7 +53,6 @@ class MessageFeedback(Base):
     message_id = Column(Integer, ForeignKey("messages.id"), nullable=False, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     is_positive = Column(Boolean, nullable=False)  # True = like, False = dislike
-    comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

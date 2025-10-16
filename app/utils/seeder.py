@@ -7,6 +7,8 @@ from app.crud.user import user_crud
 from app.crud.scene import scene_crud
 from app.schemas.user import UserCreate
 from app.schemas.scene import SceneCreate
+from app.models.knowledge import KnowledgeBase
+from app.services.embeddings import embed_texts, get_openai_client
 
 import logging
 
@@ -95,7 +97,6 @@ def seed_chat_data(db):
                     "content": "¿Cómo llego a la biblioteca?",
                     "is_from_user": True,
                     "scene_context_id": entrada.id if entrada else None,
-                    # Intención detectada: NAVEGACIÓN
                     "intent_category": "navegacion",
                     "intent_confidence": 0.83,
                     "intent_keywords": ["como llego", "biblioteca"],
@@ -106,8 +107,7 @@ def seed_chat_data(db):
                     "is_from_user": False,
                     "tokens_used": 35,
                     "feedback": {
-                        "is_positive": True,
-                        "comment": "Instrucciones claras y precisas"
+                        "is_positive": True
                     }
                 },
                 {
@@ -144,8 +144,7 @@ def seed_chat_data(db):
                     "is_from_user": False,
                     "tokens_used": 42,
                     "feedback": {
-                        "is_positive": True,
-                        "comment": "Información completa y útil"
+                        "is_positive": True
                     }
                 },
                 {
@@ -194,8 +193,7 @@ def seed_chat_data(db):
                     "is_from_user": False,
                     "tokens_used": 45,
                     "feedback": {
-                        "is_positive": True,
-                        "comment": "Muy bien organizado y específico"
+                        "is_positive": True
                     }
                 }
             ]
@@ -229,7 +227,6 @@ def seed_chat_data(db):
                 {
                     "content": "¿Cómo puedo postular a Tecsup?",
                     "is_from_user": True,
-                    # Intención detectada: ADMISIONES
                     "intent_category": "admisiones",
                     "intent_confidence": 0.67,
                     "intent_keywords": ["postular"],
@@ -240,8 +237,7 @@ def seed_chat_data(db):
                     "is_from_user": False,
                     "tokens_used": 48,
                     "feedback": {
-                        "is_positive": True,
-                        "comment": "Pasos claros y ordenados"
+                        "is_positive": True
                     }
                 },
                 {
@@ -313,13 +309,84 @@ def seed_chat_data(db):
                 feedback = MessageFeedback(
                     message_id=msg.id,
                     user_id=user_id,
-                    is_positive=fb_data["is_positive"],
-                    comment=fb_data.get("comment")
+                    is_positive=fb_data["is_positive"]
                 )
                 db.add(feedback)
                 db.commit()
 
     logger.info("✅ 3 conversaciones con mensajes y feedback creadas para user_id=2.")
+
+def seed_knowledge(db: Session):
+    """Agregar entradas de ejemplo a la base de conocimiento (knowledge_base)"""
+    # Obtener algunas escenas para relacionar contenido si aplica
+    entrada = scene_crud.get_scene_by_key(db, "0-entrada")
+    biblioteca = scene_crud.get_scene_by_key(db, "2-biblioteca")
+
+    knowledge_entries = [
+        {
+            "content": "La biblioteca de Tecsup ofrece préstamo de libros, salas de estudio grupal y acceso a bases de datos digitales.",
+            "category": "servicios",
+            "subcategory": "biblioteca",
+            "scene_id": biblioteca.id if biblioteca else None
+        },
+        {
+            "content": "La carrera de Mecatrónica Industrial tiene una duración aproximada de 3 años (6 semestres).",
+            "category": "carreras",
+            "subcategory": "mecatronica",
+            "scene_id": None
+        },
+        {
+            "content": "Para postular a Tecsup, debes completar la solicitud en línea, presentar certificado de estudios secundarios y rendir el examen de admisión.",
+            "category": "admisiones",
+            "subcategory": "requisitos",
+            "scene_id": None
+        },
+        {
+            "content": "El comedor estudiantil se encuentra en el primer piso, cerca del patio central, y ofrece opciones de comida económica para estudiantes.",
+            "category": "servicios",
+            "subcategory": "comedor",
+            "scene_id": entrada.id if entrada else None
+        }
+    ]
+
+    added = 0
+    # Primero insertar filas sin embeddings
+    created_kbs = []
+    for entry in knowledge_entries:
+        kb = KnowledgeBase(
+            content=entry["content"],
+            category=entry["category"],
+            subcategory=entry.get("subcategory"),
+            scene_id=entry.get("scene_id"),
+            is_active=True
+        )
+        db.add(kb)
+        try:
+            db.commit()
+            db.refresh(kb)
+            created_kbs.append(kb)
+            added += 1
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error insertando knowledge entry: {e}")
+
+    # Si hay clave de OpenAI, intentar generar embeddings en batch y guardarlos
+    try:
+        # Esto verifica si la variable de entorno está presente y si el cliente puede inicializarse
+        get_openai_client()
+        texts = [k.content for k in created_kbs]
+        if texts:
+            embeddings = embed_texts(texts)
+            for kb_obj, emb in zip(created_kbs, embeddings):
+                kb_obj.embedding = emb
+                db.add(kb_obj)
+            db.commit()
+            logger.info("Embeddings generados y guardados para entries seed.")
+    except Exception as e:
+        # No crítico: si falla, las filas quedan sin embedding y se pueden calcular luego
+        logger.warning(f"No se pudieron generar embeddings en el seeder: {e}")
+
+    logger.info(f"✅ {added} entradas de knowledge_base creadas.")
 
 def run_seeder():
     """Ejecutar el seeder basico"""
@@ -336,6 +403,8 @@ def run_seeder():
         # Agregar datos básicos
         seed_users(db)
         seed_basic_scenes(db)
+        # Agregar knowledge base
+        seed_knowledge(db)
         seed_chat_data(db)
         
         # Estadísticas
