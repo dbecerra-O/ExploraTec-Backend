@@ -19,6 +19,7 @@ python-dotenv==1.0.0       # Cargar variables de entorno desde archivos .env
 # Validación
 email-validator==2.1.0     # Validación de emails
 pydantic==2.5.0           # Validación de datos y settings
+rapidfuzz==3.14.1       # Comparación rápida de cadenas
 
 # APIs de IA
 openai==1.3.7             # OpenAI GPT API

@@ -48,7 +48,6 @@ class Message(MessageBase):
 
     class Config:
         from_attributes = True
-        orm_mode = True
 
 # Schema para Conversation
 class ConversationBase(BaseModel):
@@ -88,12 +87,25 @@ class ChatMessage(BaseModel):
     conversation_id: Optional[int] = None  # Si es None, se crea nueva conversación
     scene_context_id: Optional[int] = None
 
+class NavigationInfo(BaseModel):
+    from_scene: str
+    to_scene: str
+    to_scene_id: Optional[int] = None
+    path: List[str]
+    distance: int
+    steps: int
+    should_navigate: bool
+    already_here: bool = False
+    from_scene_name: Optional[str] = None
+    to_scene_name: Optional[str] = None
+
 # Schema para la respuesta del chatbot
 class ChatResponse(BaseModel):
     user_message: Message
     assistant_message: Message
     conversation: ConversationSimple
     is_new_conversation: bool = False
+    navigation: Optional[NavigationInfo] = None
     response_time_ms: Optional[int] = None
     
 class IntentStats(BaseModel):
