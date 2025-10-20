@@ -81,7 +81,6 @@ async def update_user(
                 detail="El email ya está en uso"
             )
     
-    # Verificar que el username no esté en uso por otro usuario
     if user_update.username:
         username_user = user_crud.get_user_by_username(db, username=user_update.username)
         if username_user and username_user.id != user_id:
