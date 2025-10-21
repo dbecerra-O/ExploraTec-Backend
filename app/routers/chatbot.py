@@ -17,7 +17,7 @@ from app.schemas.chat import (
 from app.crud.chat import conversation_crud, message_crud, feedback_crud, stats_crud
 
 from app.services.chatbot import (
-    validate_message_content, check_rate_limit, generate_ai_response, handle_navigation_intent,
+    validate_message_content, check_rate_limit, generate_ai_response,
     get_or_create_conversation, handle_clarification_response, retrieve_knowledge_context,
     get_scene_context, get_conversation_history, handle_navigation_if_needed
 )
@@ -106,7 +106,8 @@ async def send_message(
         intent_category=intent_result["category"],
         message_content=message.content,
         scene_context_id=message.scene_context_id,
-        assistant_message=assistant_message
+        assistant_message=assistant_message,
+        intent_all_matches=intent_result.get("all_matches")
     )
     
     conversation_crud.update_conversation(db, conversation.id, ConversationUpdate())

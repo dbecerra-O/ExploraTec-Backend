@@ -14,7 +14,6 @@ class Conversation(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relaciones (usando string references)
     user = relationship("User", back_populates="conversations")
     scene = relationship("Scene")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
@@ -28,16 +27,15 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id"), nullable=False)
     content = Column(Text, nullable=False)
-    is_from_user = Column(Boolean, nullable=False, default=True)  # True = usuario, False = asistente
+    is_from_user = Column(Boolean, nullable=False, default=True)
     scene_context_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)
     tokens_used = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    intent_category = Column(String(50), nullable=True)  # "navegacion", "eventos", "carreras", etc.
-    intent_confidence = Column(Float, nullable=True)  # 0.0 a 1.0
-    intent_keywords = Column(JSON, nullable=True)  # Lista de palabras clave encontradas
-    requires_clarification = Column(Boolean, default=False)  # Si necesita aclaración
+    intent_category = Column(String(50), nullable=True)
+    intent_confidence = Column(Float, nullable=True)
+    intent_keywords = Column(JSON, nullable=True)
+    requires_clarification = Column(Boolean, default=False)
     
-    # Relaciones (usando string references)
     conversation = relationship("Conversation", back_populates="messages")
     scene_context = relationship("Scene")
     feedback = relationship("MessageFeedback", back_populates="message", uselist=False)
@@ -52,11 +50,10 @@ class MessageFeedback(Base):
     id = Column(Integer, primary_key=True, index=True)
     message_id = Column(Integer, ForeignKey("messages.id"), nullable=False, unique=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    is_positive = Column(Boolean, nullable=False)  # True = like, False = dislike
+    is_positive = Column(Boolean, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relaciones (usando string references)
     message = relationship("Message", back_populates="feedback")
     user = relationship("User")
     

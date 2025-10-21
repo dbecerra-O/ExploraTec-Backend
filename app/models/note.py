@@ -29,8 +29,8 @@ class Note(Base):
     gender = Column(String(100))
     
     # Claves foráneas
-    User_id = Column(Integer, ForeignKey('user.id'))
-    Speciality_id = Column(BigInteger, ForeignKey('speciality.id'))
+    User_id = Column(Integer, ForeignKey('users.id'))
+    Speciality_id = Column(BigInteger, ForeignKey('specialties.id'))
     
     # Relaciones
     user = relationship("User", back_populates="notes")

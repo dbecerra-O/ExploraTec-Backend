@@ -94,5 +94,4 @@ class UserCRUD:
             return None
         return user
 
-# Instancia del CRUD
 user_crud = UserCRUD()

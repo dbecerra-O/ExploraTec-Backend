@@ -28,4 +28,4 @@ class SearchResult(BaseModel):
     id: int
     content: str
     category: str
-    distance: float  # Qué tan similar es (menor = mejor)
+    distance: float

@@ -4,19 +4,18 @@ from datetime import datetime
 
 
 class NoteCreate(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100)
-    lastname: str = Field(..., min_length=2, max_length=100)
-    dni: str = Field(..., min_length=8, max_length=9)
-    phone: Optional[str] = Field(None, max_length=9)
-    reason: Optional[str] = None
-    visit_date: Optional[datetime] = None
+    name: str
+    lastname: str
+    dni: str
+    phone: Optional[str]
+    reason: Optional[str]
+    visit_date: Optional[datetime]
     speciality_id: int
-    
     # Datos del familiar (opcional)
-    family_dni: Optional[str] = Field(None, max_length=9)
-    family_lastname: Optional[str] = Field(None, max_length=100)
-    family_name: Optional[str] = Field(None, max_length=100)
-    gender: Optional[str] = Field(None, max_length=100)
+    family_dni: Optional[str]
+    family_lastname: Optional[str]
+    family_name: Optional[str]
+    gender: Optional[str]
 
 
 class NoteResponse(BaseModel):
@@ -37,9 +36,9 @@ class NoteResponse(BaseModel):
 
 
 class NoteUpdate(BaseModel):
-    is_accepted: Optional[bool] = None
-    visit_date: Optional[datetime] = None
-    reason: Optional[str] = None
+    is_accepted: Optional[bool]
+    visit_date: Optional[datetime]
+    reason: Optional[str]
 
 
 class NoteStats(BaseModel):

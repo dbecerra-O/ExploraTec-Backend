@@ -103,24 +103,13 @@ class IntentDetector:
     def detect_intent(message: str) -> Dict:
         """
         Detectar la intención principal del mensaje
-        
-        Prioridad de detección:
-        1. Patrones de navegación (regex)
-        2. Sistema de puntuación (keywords)
-        3. Manejo de múltiples intenciones
         """
         message_lower = message.lower()
         
-        # ========================================
-        # PASO 1: DETECCIÓN POR PATRONES (PRIORIDAD MÁXIMA)
-        # ========================================
         nav_match = IntentDetector.detect_navigation_pattern(message_lower)
         if nav_match:
             return nav_match
         
-        # ========================================
-        # PASO 2: SISTEMA DE PUNTUACIÓN (KEYWORDS)
-        # ========================================
         category_scores = {}
         keywords_by_category = {}
         
@@ -166,10 +155,7 @@ class IntentDetector:
             key=lambda x: x[1], 
             reverse=True
         )
-        
-        # ========================================
-        # PASO 3: PRIORIZAR NAVEGACIÓN SI EMPATE
-        # ========================================
+
         best_category, best_score = sorted_categories[0]
         
         # Si hay empate o diferencia pequeña, priorizar NAVEGACION

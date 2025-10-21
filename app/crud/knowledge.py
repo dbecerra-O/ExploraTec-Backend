@@ -19,7 +19,6 @@ def add_knowledge(db: Session, kb: KnowledgeBaseCreate) -> KnowledgeBase:
     db.commit()
     db.refresh(new)
 
-    # Intentar generar embedding (no crítico si falla)
     try:
         emb = embed_text(kb.content)
         new.embedding = emb

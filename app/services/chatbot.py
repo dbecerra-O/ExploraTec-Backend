@@ -12,7 +12,7 @@ from app.crud.chat import conversation_crud, message_crud
 from app.models.user import User
 from app.schemas.chat import ChatMessage, ChatResponse, ConversationSimple, ConversationCreate
 from app.services.intent_detector import IntentDetector
-from app.services.rag import retrieve_similar_passages, format_retrieved_passages
+from app.services.rag import retrieve_similar_passages, format_retrieved_passages, search_events_context
 import time
 
 
@@ -116,16 +116,16 @@ def generate_ai_response(user_message: str, scene_context: str = None,
             "Eres un asistente virtual de Tecsup, una institución de educación técnica en Perú.\n"
             "Tu objetivo es ayudar a los usuarios con información sobre:\n"
             "- Carreras técnicas\n"
-            "- Proceso de admisión y requisitos\n"
             "- Instalaciones del campus (laboratorios, biblioteca, deportes)\n"
             "- Vida estudiantil y servicios\n"
             "- Horarios y calendario académico\n"
-            "- Becas y financiamiento\n\n"
-            
             # NUEVO: Instrucción de corrección ortográfica
             "IMPORTANTE: Si detectas errores ortográficos en nombres de lugares, "
             "corrige automáticamente en tu respuesta.\n"
-            "Responde de manera amigable, informativa y concisa siempre en español, sin importar el idioma en que el usuario escriba.\n"
+            "Responde de manera natural, amistosa y concisa en español. Prioriza la información proporcionada en la sección [INFORMACION_RETRIEVED] si está presente.\n"
+            "Si el usuario pregunta por eventos en general (sin especificar escena), ofrece un resumen general de eventos.\n"
+            "Si el usuario está en una escena específica (se proporcionó contexto de escena), prioriza y resume los eventos de esa escena.\n"
+            "Si detectas múltiples intenciones (por ejemplo navegación + eventos), atiende primero la intención informativa y luego sugiere acciones de navegación cortas.\n"
             "Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."
         )
 
@@ -133,7 +133,8 @@ def generate_ai_response(user_message: str, scene_context: str = None,
             system_prompt += f"\n\nContexto adicional: El usuario está en {scene_context}."
 
         if retrieved_context:
-            system_prompt += f"\n\nInformación relacionada:\n{retrieved_context}\n\n"
+            # Marcar claramente que esta es la información recuperada por RAG
+            system_prompt += f"\n\n[INFORMACION_RETRIEVED]\n{retrieved_context}\n\n"
 
         messages = [{"role": "system", "content": system_prompt}]
 
@@ -185,7 +186,6 @@ def generate_conversation_title(message_content: str) -> str:
         return " ".join(words) + "..."
 
 # FUNCIONES AUXILIARES
-
 def get_or_create_conversation(
     db: Session,
     message: ChatMessage,
@@ -248,7 +248,19 @@ def retrieve_knowledge_context(
         passages = retrieve_similar_passages(
             db, query, top_k=4, scene_id=scene_id
         )
-        return format_retrieved_passages(passages)
+        knowledge_context = format_retrieved_passages(passages)
+        
+        events_context = search_events_context(db, query, scene_id)
+        
+        if knowledge_context and events_context:
+            return f"{knowledge_context}\n\n{events_context}"
+        elif knowledge_context:
+            return knowledge_context
+        elif events_context:
+            return events_context
+        else:
+            return None
+        
     except Exception as e:
         print(f"⚠️ Error en RAG retrieval: {e}")
         db.rollback()
@@ -300,15 +312,36 @@ def handle_navigation_if_needed(
     intent_category: str,
     message_content: str,
     scene_context_id: Optional[int],
-    assistant_message: Message
+    assistant_message: Message,
+    intent_all_matches: Optional[list] = None
 ) -> Optional[Dict]:
-    """Detecta y maneja navegación si la intención es 'navegacion'"""
-    if intent_category != "navegacion" or not scene_context_id:
+    """Detecta y maneja navegación. Soporta múltiples intenciones: si 'navegacion' aparece
+    en `intent_all_matches` se considera como intención de navegación.
+    """
+    # Si no hay contexto de escena, no intentaremos navegación
+    if not scene_context_id:
+        return None
+
+    # Determinar si navegación está solicitada
+    nav_requested = False
+    if intent_category == "navegacion":
+        nav_requested = True
+    if intent_all_matches:
+        for match in intent_all_matches:
+            # match puede ser (categoria, score)
+            if isinstance(match, (list, tuple)) and len(match) >= 1 and match[0] == "navegacion":
+                nav_requested = True
+                break
+            if isinstance(match, str) and match == "navegacion":
+                nav_requested = True
+                break
+
+    if not nav_requested:
         return None
     
     navigation_data = handle_navigation_intent(
-        message_content, 
-        scene_context_id, 
+        message_content,
+        scene_context_id,
         db
     )
     

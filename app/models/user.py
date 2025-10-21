@@ -21,6 +21,7 @@ class User(Base):
     
     # Relación con conversaciones (usando string reference)
     conversations = relationship("Conversation", back_populates="user")
+    notes = relationship("Note", back_populates="user")
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}', current_scene={self.current_scene_id})>"
