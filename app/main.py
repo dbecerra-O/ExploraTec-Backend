@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.routers import auth, users, admin, chatbot, user_scenes, suggestions
+from app.routers import auth, users, admin, chatbot, user_scenes, suggestions, notes
 from app.dependencies import get_current_active_user, get_current_admin_user
 from app.models.user import User
 from app.utils.seeder import run_seeder
@@ -46,7 +46,7 @@ app.add_middleware(
 )
 
 # Incluir routers
-for router in [auth, users, admin, chatbot, user_scenes, suggestions]:
+for router in [auth, users, admin, chatbot, user_scenes, suggestions, notes]:
     app.include_router(router.router)
 
 # Rutas de ejemplo para probar la autenticación

@@ -53,8 +53,8 @@ def check_conversation_limit(db: Session, conversation_id: int) -> tuple[bool, O
     message_count = db.query(Message).filter(
         Message.conversation_id == conversation_id
     ).count()
-    if message_count >= 5:
-        return False, f"Esta conversación ha alcanzado el límite de {5} mensajes. Crea una nueva conversación."
+    if message_count >= 20:
+        return False, f"Esta conversación ha alcanzado el límite de {20} mensajes. Crea una nueva conversación."
     return True, None
 
 def handle_navigation_intent(message: str, current_scene_id: int, db: Session) -> Optional[Dict]:
