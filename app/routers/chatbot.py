@@ -3,7 +3,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from app.database import get_db
 from app.models.user import User
@@ -15,6 +15,7 @@ from app.schemas.chat import (
     ChatStats
 )
 from app.crud.chat import conversation_crud, message_crud, feedback_crud, stats_crud
+from app.crud.user import user_crud
 
 from app.services.chatbot import (
     validate_message_content, check_rate_limit, generate_ai_response,
@@ -23,8 +24,6 @@ from app.services.chatbot import (
 )
 from app.services.intent_detector import IntentDetector
 from app.dependencies import get_current_active_user, get_current_admin_user
-
-
 
 router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
@@ -214,10 +213,8 @@ async def get_user_conversations_admin(
     db: Session = Depends(get_db)
 ):
     """Ver todas las conversaciones de un usuario específico (solo admin)"""
-    
-    # Verificar que el usuario existe
-    from app.crud.user import user_crud
-    user = user_crud.get_user(db, user_id)
+
+    user = user_crud.get_users(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
@@ -249,9 +246,7 @@ async def get_user_conversation_with_messages(
 ):
     """Ver conversación específica de un usuario con TODOS sus mensajes (solo admin)."""
     
-    # Verificar que el usuario existe
-    from app.crud.user import user_crud
-    user = user_crud.get_user(db, user_id)
+    user = user_crud.get_users(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
@@ -277,7 +272,6 @@ async def get_chat_analytics(
     avg_conversations_per_user = db.query(Conversation).count() / max(total_users_with_conversations, 1)
     
     # Usuarios más activos
-    from sqlalchemy import func
     top_users = db.query(
         User.username, User.full_name,
         func.count(Conversation.id).label('conversations'),

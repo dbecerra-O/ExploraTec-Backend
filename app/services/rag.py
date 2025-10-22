@@ -17,7 +17,7 @@ def cosine_distance(a: List[float], b: List[float]) -> float:
     return 1.0 - (dot / (norm_a * norm_b))
 
 
-def retrieve_similar_passages(db: Session, query: str, top_k: int = 4, scene_id: Optional[int] = None, distance_threshold: Optional[float] = None) -> List[Dict]:
+def retrieve_similar_passages(db: Session, query: str, top_k: int = 2, scene_id: Optional[int] = None, distance_threshold: Optional[float] = None) -> List[Dict]:
     """Búsqueda híbrida: vector + keyword"""
 
     q_emb = embed_text(query)

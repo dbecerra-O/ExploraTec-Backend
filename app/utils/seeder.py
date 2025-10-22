@@ -109,6 +109,12 @@ def seed_knowledge(db: Session):
             "category": "servicios",
             "subcategory": "comedor",
             "scene_id": entrada.id if entrada else None
+        },
+        {
+            "content": "Los docentes expertos dentro de tecnologia digital incluyen especialistas en desarrollo de software, redes y ciberseguridad. Como Silvia Montoya y Jaime Gomez",
+            "category": "carreras",
+            "subcategory": "Tecnología digital",
+            "scene_id": None
         }
     ]
 
