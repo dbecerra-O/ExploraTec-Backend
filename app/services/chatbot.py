@@ -57,11 +57,11 @@ def check_conversation_limit(db: Session, conversation_id: int) -> tuple[bool, O
         return False, f"Esta conversación ha alcanzado el límite de {20} mensajes. Crea una nueva conversación."
     return True, None
 
-def handle_navigation_intent(message: str, current_scene_id: int, db: Session) -> Optional[Dict]:
+def handle_navigation_intent(message: str, current_scene_key: str, db: Session) -> Optional[Dict]:
     """Detectar si el usuario quiere navegar a otra escena"""
     
-    # Obtener scene_key actual
-    current_scene = scene_crud.get_scene(db, current_scene_id)
+    # Obtener escena actual por key
+    current_scene = scene_crud.get_scene_by_key(db, current_scene_key)
     if not current_scene:
         return None
     
@@ -78,7 +78,7 @@ def handle_navigation_intent(message: str, current_scene_id: int, db: Session) -
             "to_scene": target_scene_key,
             "from_scene_name": current_scene.name,
             "to_scene_name": target_scene.name if target_scene else target_scene_key,
-            "to_scene_id": current_scene_id,
+            "to_scene_id": current_scene.id,
             "path": [current_scene.scene_key],
             "distance": 0,
             "steps": 0,
@@ -204,11 +204,18 @@ def get_or_create_conversation(
         
         return conversation, False
     else:
+        # Convertir scene_key a scene_id si existe
+        scene_id = None
+        if message.scene_context:
+            scene = scene_crud.get_scene_by_key(db, message.scene_context)
+            if scene:
+                scene_id = scene.id
+
         # Crear nueva conversación automáticamente
         auto_title = generate_conversation_title(message.content)
         conversation_data = ConversationCreate(
             title=auto_title,
-            scene_id=message.scene_context_id,
+            scene_id=scene_id,
             is_active=True
         )
         conversation = conversation_crud.create_conversation(
@@ -296,10 +303,25 @@ def handle_clarification_response(
         created_at=conversation.created_at,
         updated_at=conversation.updated_at
     )
-    
+    def _message_to_dict(msg: Message) -> dict:
+        return {
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "content": msg.content,
+            "is_from_user": msg.is_from_user,
+            "scene_context": msg.scene_context.scene_key if getattr(msg, "scene_context", None) else None,
+            "tokens_used": msg.tokens_used,
+            "created_at": msg.created_at,
+            "feedback": None,
+            "intent_category": getattr(msg, "intent_category", None),
+            "intent_confidence": getattr(msg, "intent_confidence", None),
+            "intent_keywords": getattr(msg, "intent_keywords", None),
+            "requires_clarification": getattr(msg, "requires_clarification", None)
+        }
+
     return ChatResponse(
-        user_message=user_message,
-        assistant_message=assistant_message,
+        user_message=_message_to_dict(user_message),
+        assistant_message=_message_to_dict(assistant_message),
         conversation=conversation_simple,
         is_new_conversation=is_new_conversation,
         navigation=None,
@@ -311,7 +333,7 @@ def handle_navigation_if_needed(
     db: Session,
     intent_category: str,
     message_content: str,
-    scene_context_id: Optional[int],
+        scene_context: Optional[str],
     assistant_message: Message,
     intent_all_matches: Optional[list] = None
 ) -> Optional[Dict]:
@@ -319,7 +341,7 @@ def handle_navigation_if_needed(
     en `intent_all_matches` se considera como intención de navegación.
     """
     # Si no hay contexto de escena, no intentaremos navegación
-    if not scene_context_id:
+    if not scene_context:
         return None
 
     # Determinar si navegación está solicitada
@@ -341,7 +363,7 @@ def handle_navigation_if_needed(
     
     navigation_data = handle_navigation_intent(
         message_content,
-        scene_context_id,
+            scene_context,
         db
     )
     

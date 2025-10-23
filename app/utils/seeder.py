@@ -34,20 +34,42 @@ def create_tables():
 def seed_basic_scenes(db: Session):
     """Crear escenas"""
     
-    scenes = [
-        {"scene_key": "0-entrada", "name": "Entrada Principal"},
+    scenes_data = [
+        {"scene_key": "0-entrada", "name": "Entrada"},
         {"scene_key": "1-patio-central", "name": "Patio Central"},
-        {"scene_key": "2-biblioteca", "name": "Biblioteca"},
-        {"scene_key": "3-laboratorio-mecanica", "name": "Laboratorio de Mecánica"},
-        {"scene_key": "4-comedor", "name": "Comedor Estudiantil"},
-        {"scene_key": "5-auditorio", "name": "Auditorio Principal"},
+        {"scene_key": "2-camino", "name": "Camino"},
+        {"scene_key": "3-pabellon-4---piso-2-s", "name": "Pabellón 4 - Piso 2-S"},
+        {"scene_key": "4-pabellon-7", "name": "Pabellón 7"},
+        {"scene_key": "5-area-de-salones-4b", "name": "Área de Salones 4B"},
+        {"scene_key": "6-polideportivo", "name": "Polideportivo"},
+        {"scene_key": "7-area-de-tecnologia", "name": "Área de Tecnología"},
+        {"scene_key": "8-area-de-mecanica", "name": "Área de Mecánica"},
+        {"scene_key": "9-mecanica", "name": "Mecánica"},
+        {"scene_key": "10-segundo-piso-e", "name": "Segundo Piso E"},
+        {"scene_key": "11-segundo-piso-s", "name": "Segundo Piso S"},
+        {"scene_key": "12-zona-verde", "name": "Zona Verde"},
+        {"scene_key": "13-cerca-del-ajedrez", "name": "Cerca del Ajedrez"},
+        {"scene_key": "14-salon-701", "name": "Salón 701"},
+        {"scene_key": "15-salones-de-mecanica", "name": "Salones de Mecánica"},
+        {"scene_key": "16-salon-702", "name": "Salón 702"},
+        {"scene_key": "17-salon-704", "name": "Salón 704"},
+        {"scene_key": "18-maquinitas", "name": "Maquinitas"},
+        {"scene_key": "19-pabellon-4---piso-2-e", "name": "Pabellón 4 - Piso 2-E"},
+        {"scene_key": "20-pabellon-4---piso-2-m", "name": "Pabellón 4 - Piso 2-M"},
+        {"scene_key": "21-pabellon-4---piso-2--a", "name": "Pabellón 4 - Piso 2-A"},
+        {"scene_key": "22-pabellon-4---piso-1", "name": "Pabellón 4 - Piso 1"},
+        {"scene_key": "23-salon-pabellon-4", "name": "Salón Pabellón 4"},
+        {"scene_key": "24-pabellon-4", "name": "Pabellón 4"},
+        {"scene_key": "25-entrada-biblioteca", "name": "Entrada Biblioteca"},
+        {"scene_key": "26-biblioteca", "name": "Biblioteca"},
+        {"scene_key": "27-pabellon-14", "name": "Pabellón 14"},
+        {"scene_key": "28-salon-1509", "name": "Salón 1509"}
     ]
     
-    for scene_data in scenes:
-        existing_scene = scene_crud.get_scene_by_key(db, scene_key=scene_data["scene_key"])
-        if not existing_scene:
-            scene_create = SceneCreate(**scene_data)
-            scene = scene_crud.create_scene(db=db, scene=scene_create)
+    for scene_data in scenes_data:
+        existing = scene_crud.get_scene_by_key(db, scene_data["scene_key"])
+        if not existing:
+            scene = scene_crud.create_scene(db, SceneCreate(**scene_data))
             logger.info(f"Escena creada: {scene.scene_key} - {scene.name}")
 
 def seed_users(db: Session):
@@ -82,33 +104,34 @@ def seed_users(db: Session):
 def seed_knowledge(db: Session):
     """Agregar entradas de ejemplo a la base de conocimiento (knowledge_base)"""
     # Obtener algunas escenas para relacionar contenido si aplica
-    entrada = scene_crud.get_scene_by_key(db, "0-entrada")
-    biblioteca = scene_crud.get_scene_by_key(db, "2-biblioteca")
+    biblioteca = scene_crud.get_scene_by_key(db, "26-biblioteca")
+    poli = scene_crud.get_scene_by_key(db, "6-polideportivo")
+    pabellon7 = scene_crud.get_scene_by_key(db, "4-pabellon-7")
 
     knowledge_entries = [
         {
-            "content": "La biblioteca de Tecsup ofrece préstamo de libros, salas de estudio grupal y acceso a bases de datos digitales.",
+            "content": "La biblioteca cuenta con préstamo de libros, salas de estudio grupal, acceso a computadoras y bases de datos digitales.",
             "category": "servicios",
             "subcategory": "biblioteca",
             "scene_id": biblioteca.id if biblioteca else None
         },
         {
-            "content": "La carrera de Mecatrónica Industrial tiene una duración aproximada de 3 años (6 semestres).",
-            "category": "carreras",
-            "subcategory": "mecatronica",
-            "scene_id": None
-        },
-        {
-            "content": "Para postular a Tecsup, debes completar la solicitud en línea, presentar certificado de estudios secundarios y rendir el examen de admisión.",
-            "category": "admisiones",
-            "subcategory": "requisitos",
-            "scene_id": None
-        },
-        {
-            "content": "El comedor estudiantil se encuentra en el primer piso, cerca del patio central, y ofrece opciones de comida económica para estudiantes.",
+            "content": "El polideportivo tiene cancha de fútbol, básquet, gimnasio y vestuarios. Horario: Lunes a Viernes 7am-9pm.",
             "category": "servicios",
-            "subcategory": "comedor",
-            "scene_id": entrada.id if entrada else None
+            "subcategory": "deportes",
+            "scene_id": poli.id if poli else None
+        },
+        {
+            "content": "El Pabellón 7 tiene los salones 701, 702 y 704. Se imparten clases de carreras técnicas.",
+            "category": "servicios",
+            "subcategory": "salones",
+            "scene_id": pabellon7.id if pabellon7 else None
+        },
+        {
+            "content": "Tecsup ofrece carreras como Mecatrónica Industrial, Tecnología Digital, Mantenimiento de Maquinaria.",
+            "category": "carreras",
+            "subcategory": None,
+            "scene_id": None
         },
         {
             "content": "Los docentes expertos dentro de tecnologia digital incluyen especialistas en desarrollo de software, redes y ciberseguridad. Como Silvia Montoya y Jaime Gomez",

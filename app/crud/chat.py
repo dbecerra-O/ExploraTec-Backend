@@ -7,6 +7,7 @@ from app.schemas.chat import (
     ConversationCreate, ConversationUpdate, MessageCreate, 
     MessageFeedbackCreate, MessageFeedbackUpdate, ChatStats, IntentStats
 )
+from app.crud.scene import scene_crud
 
 class ConversationCRUD:
     def get_conversation(self, db: Session, conversation_id: int) -> Optional[Conversation]:
@@ -76,11 +77,18 @@ class MessageCRUD:
     
     def create_message(self, db: Session, message: MessageCreate, conversation_id: int, is_from_user: bool, tokens_used: Optional[int] = None) -> Message:
         """Crea un nuevo mensaje"""
+        # Si tenemos un scene_key, obtenemos el scene_id correspondiente
+        scene_context_id = None
+        if message.scene_context:
+            scene = scene_crud.get_scene_by_key(db, message.scene_context)
+            if scene:
+                scene_context_id = scene.id
+
         db_message = Message(
             conversation_id=conversation_id,
             content=message.content,
             is_from_user=is_from_user,
-            scene_context_id=message.scene_context_id,
+            scene_context_id=scene_context_id,
             tokens_used=tokens_used
         )
         db.add(db_message)
@@ -88,14 +96,14 @@ class MessageCRUD:
         db.refresh(db_message)
         return db_message
     
-    def create_user_message(self, db: Session, content: str, conversation_id: int, scene_context_id: Optional[int] = None) -> Message:
+    def create_user_message(self, db: Session, content: str, conversation_id: int, scene_context: Optional[str] = None) -> Message:
         """Crea un mensaje de usuario"""
-        message_data = MessageCreate(content=content, scene_context_id=scene_context_id)
+        message_data = MessageCreate(content=content, scene_context=scene_context)
         return self.create_message(db, message_data, conversation_id, True)  # True = es del usuario
     
-    def create_assistant_message(self, db: Session, content: str, conversation_id: int, scene_context_id: Optional[int] = None, tokens_used: Optional[int] = None) -> Message:
-        """Crea un mensaje del asistente"""
-        message_data = MessageCreate(content=content, scene_context_id=scene_context_id)
+    def create_assistant_message(self, db: Session, content: str, conversation_id: int, scene_context: Optional[str] = None, tokens_used: Optional[int] = None) -> Message:
+        """Crea un mensaje del asistente usando scene_key opcional"""
+        message_data = MessageCreate(content=content, scene_context=scene_context)
         return self.create_message(db, message_data, conversation_id, False, tokens_used)  # False = es del asistente
     
     def create_user_message_with_intent(
@@ -103,13 +111,20 @@ class MessageCRUD:
         db: Session,
         content: str,
         conversation_id: int,
-        scene_context_id: Optional[int] = None,
+        scene_context: Optional[str] = None,
         intent_category: Optional[str] = None,
         intent_confidence: Optional[float] = None,
         intent_keywords: Optional[List[str]] = None,
         requires_clarification: bool = False
     ) -> Message:
         """Crea un mensaje de usuario CON detección de intención"""
+        # Convertir scene_key a scene_id si existe
+        scene_context_id = None
+        if scene_context:
+            scene = scene_crud.get_scene_by_key(db, scene_context)
+            if scene:
+                scene_context_id = scene.id
+
         db_message = Message(
             conversation_id=conversation_id,
             content=content,

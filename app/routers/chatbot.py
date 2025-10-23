@@ -1,5 +1,5 @@
 import time
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from app.schemas.chat import (
 )
 from app.crud.chat import conversation_crud, message_crud, feedback_crud, stats_crud
 from app.crud.user import user_crud
+from app.crud.scene import scene_crud
 
 from app.services.chatbot import (
     validate_message_content, check_rate_limit, generate_ai_response,
@@ -61,7 +62,7 @@ async def send_message(
         db=db,
         content=message.content.strip(),
         conversation_id=conversation.id,
-        scene_context_id=message.scene_context_id,
+        scene_context=message.scene_context,
         intent_category=intent_result["category"],
         intent_confidence=intent_result["confidence"],
         intent_keywords=intent_result["keywords_found"],
@@ -78,14 +79,19 @@ async def send_message(
             is_new_conversation=is_new_conversation,
             start_time=start_time
         )
-    
+    scene_id = None
+    if message.scene_context:
+        scene = scene_crud.get_scene_by_key(db, message.scene_context)
+        if scene:
+            scene_id = scene.id
+
     retrieved_context = retrieve_knowledge_context(
         db=db,
         query=message.content.strip(),
-        scene_id=message.scene_context_id
+        scene_id=scene_id
     )
 
-    scene_context = get_scene_context(db, message.scene_context_id)
+    scene_context = get_scene_context(db, scene_id)
     conversation_history = get_conversation_history(db, conversation.id)
     
     bot_response, tokens_used = generate_ai_response(
@@ -100,11 +106,18 @@ async def send_message(
         db, bot_response, conversation.id, None, tokens_used
     )
 
+    # Obtener scene_id desde scene_context si existe
+    scene_id = None
+    if message.scene_context:
+        scene = scene_crud.get_scene_by_key(db, message.scene_context)
+        if scene:
+            scene_id = scene.id
+
     navigation_data = handle_navigation_if_needed(
         db=db,
         intent_category=intent_result["category"],
         message_content=message.content,
-        scene_context_id=message.scene_context_id,
+        scene_context=message.scene_context,
         assistant_message=assistant_message,
         intent_all_matches=intent_result.get("all_matches")
     )
@@ -121,10 +134,25 @@ async def send_message(
         created_at=conversation.created_at,
         updated_at=conversation.updated_at
     )
-    
+    def _message_to_dict(msg: Message) -> dict:
+        return {
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "content": msg.content,
+            "is_from_user": msg.is_from_user,
+            "scene_context": msg.scene_context.scene_key if getattr(msg, "scene_context", None) else None,
+            "tokens_used": msg.tokens_used,
+            "created_at": msg.created_at,
+            "feedback": None,
+            "intent_category": getattr(msg, "intent_category", None),
+            "intent_confidence": getattr(msg, "intent_confidence", None),
+            "intent_keywords": getattr(msg, "intent_keywords", None),
+            "requires_clarification": getattr(msg, "requires_clarification", None)
+        }
+
     return ChatResponse(
-        user_message=user_message,
-        assistant_message=assistant_message,
+        user_message=_message_to_dict(user_message),
+        assistant_message=_message_to_dict(assistant_message),
         conversation=conversation_simple,
         is_new_conversation=is_new_conversation,
         navigation=navigation_data,
@@ -271,13 +299,17 @@ async def get_chat_analytics(
     total_users_with_conversations = db.query(User.id).join(Conversation).distinct().count()
     avg_conversations_per_user = db.query(Conversation).count() / max(total_users_with_conversations, 1)
     
-    # Usuarios más activos
+    # Usuarios más activos - usando select_from() para establecer el orden de joins
     top_users = db.query(
-        User.username, User.full_name,
+        User.id, User.username,
         func.count(Conversation.id).label('conversations'),
         func.count(Message.id).label('messages')
-    ).join(Conversation).join(Message).group_by(
-        User.id, User.username, User.full_name
+    ).select_from(User).join(
+        Conversation, User.id == Conversation.user_id
+    ).join(
+        Message, Message.conversation_id == Conversation.id
+    ).group_by(
+        User.id, User.username
     ).order_by(func.count(Message.id).desc()).limit(5).all()
     
     return {
@@ -285,42 +317,12 @@ async def get_chat_analytics(
         "avg_conversations_per_user": round(avg_conversations_per_user, 2),
         "top_active_users": [
             {
+                "id": user.id,
                 "username": user.username,
                 "conversations": user.conversations,
                 "messages": user.messages
             }
             for user in top_users
-        ]
-    }
-
-@router.get("/admin/intents/ambiguous")
-async def get_ambiguous_queries(
-    limit: int = 20,
-    current_admin: User = Depends(get_current_admin_user),
-    db: Session = Depends(get_db)
-):
-    """Obtener consultas ambiguas que requirieron clarificación"""
-    
-    ambiguous_messages = message_crud.get_ambiguous_messages(db, skip=0, limit=limit)
-    
-    total_ambiguous = db.query(Message).filter(
-        Message.requires_clarification == True,
-        Message.is_from_user == True
-    ).count()
-    
-    return {
-        "total_ambiguous": total_ambiguous,
-        "showing": len(ambiguous_messages),
-        "examples": [
-            {
-                "id": msg.id,
-                "content": msg.content,
-                "detected_category": msg.intent_category,
-                "confidence": msg.intent_confidence,
-                "keywords": msg.intent_keywords,
-                "created_at": msg.created_at
-            }
-            for msg in ambiguous_messages
         ]
     }
 
@@ -344,7 +346,7 @@ async def get_messages_by_intent_category(
                 "content": msg.content,
                 "confidence": msg.intent_confidence,
                 "keywords": msg.intent_keywords,
-                "scene_context_id": msg.scene_context_id,
+                "scene_context": msg.scene_context.scene_key if msg.scene_context else None,
                 "created_at": msg.created_at
             }
             for msg in messages
@@ -379,5 +381,92 @@ async def get_low_confidence_intents(
                 "created_at": msg.created_at
             }
             for msg in low_confidence_messages
+        ]
+    }
+
+@router.get("/admin/messages")
+async def get_all_messages_admin(
+    skip: int = 0,
+    limit: int = 50,
+    scene_id: Optional[int] = None,
+    intent_category: Optional[str] = None,
+    min_confidence: Optional[float] = None,
+    only_user_messages: bool = True,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Obtener todos los mensajes con sus intenciones y métricas (admin).
+    """
+    
+    # Consulta base
+    query = db.query(
+        Message,
+        User.username.label('username'),
+        Conversation.title.label('conversation_title')
+    ).join(
+        Conversation, Message.conversation_id == Conversation.id
+    ).join(
+        User, Conversation.user_id == User.id
+    )
+    
+    # Aplicar filtros
+    if only_user_messages:
+        query = query.filter(Message.is_from_user == True)
+    
+    if scene_id is not None:
+        query = query.filter(Message.scene_context_id == scene_id)
+    
+    if intent_category:
+        query = query.filter(Message.intent_category == intent_category)
+    
+    if min_confidence is not None:
+        query = query.filter(Message.intent_confidence >= min_confidence)
+    
+    # Contar total antes de paginar
+    total_count = query.count()
+    
+    # Aplicar ordenamiento y paginación
+    messages = query.order_by(desc(Message.created_at)).offset(skip).limit(limit).all()
+    
+    # Estadísticas de intenciones para los mensajes filtrados
+    intent_stats = db.query(
+        Message.intent_category,
+        func.count(Message.id).label('count'),
+        func.avg(Message.intent_confidence).label('avg_confidence')
+    ).filter(
+        Message.id.in_([msg[0].id for msg in messages]),
+        Message.intent_category.isnot(None)
+    ).group_by(Message.intent_category).all()
+    
+    return {
+        "total_messages": total_count,
+        "showing": len(messages),
+        "skip": skip,
+        "limit": limit,
+        "intent_statistics": [
+            {
+                "category": stat[0],
+                "count": stat[1],
+                "avg_confidence": round(float(stat[2] or 0), 2)
+            }
+            for stat in intent_stats
+        ],
+        "messages": [
+            {
+                "id": msg[0].id,
+                "content": msg[0].content,
+                "username": msg[1],
+                "conversation_title": msg[2],
+                "scene_context": msg[0].scene_context.scene_key if msg[0].scene_context else None,
+                "is_from_user": msg[0].is_from_user,
+                "intent_category": msg[0].intent_category,
+                "intent_confidence": msg[0].intent_confidence,
+                "intent_keywords": msg[0].intent_keywords,
+                "requires_clarification": msg[0].requires_clarification,
+                "tokens_used": msg[0].tokens_used,
+                "created_at": msg[0].created_at
+            }
+            for msg in messages
         ]
     }

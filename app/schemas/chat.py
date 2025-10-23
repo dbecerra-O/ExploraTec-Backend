@@ -26,11 +26,11 @@ class MessageFeedback(MessageFeedbackBase):
 class MessageBase(BaseModel):
     content: str
     is_from_user: bool
-    scene_context_id: Optional[int] = None
+    scene_context: Optional[str] = None
 
 class MessageCreate(BaseModel):
     content: str
-    scene_context_id: Optional[int] = None
+    scene_context: Optional[str] = None
 
 class MessageUpdate(BaseModel):
     content: Optional[str] = None
@@ -85,7 +85,7 @@ class Conversation(ConversationBase):
 class ChatMessage(BaseModel):
     content: str
     conversation_id: Optional[int] = None  # Si es None, se crea nueva conversación
-    scene_context_id: Optional[int] = None
+    scene_context: Optional[str] = None  # scene_key de la escena actual
 
 class NavigationInfo(BaseModel):
     from_scene: str
