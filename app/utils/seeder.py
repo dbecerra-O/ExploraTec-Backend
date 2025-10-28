@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from app.database import engine, SessionLocal
 from app.models.user import User
 from app.models.scene import Scene
-from app.models.chat import Conversation, Message, MessageFeedback
+from app.models.chat import Conversation, Message
 from app.crud.user import user_crud
 from app.crud.scene import scene_crud
 from app.schemas.user import UserCreate
@@ -11,6 +11,7 @@ from app.models.knowledge import KnowledgeBase
 from app.services.embeddings import embed_texts, get_openai_client
 
 import logging
+from datetime import datetime, timedelta
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -180,6 +181,94 @@ def seed_knowledge(db: Session):
 
     logger.info(f"✅ {added} entradas de knowledge_base creadas.")
 
+def seed_example_conversations(db: Session):
+    """Crear 4 conversaciones de ejemplo con mensajes (usuario + asistente)."""
+    from app.crud.scene import scene_crud
+
+    logger.info("Seed: creando conversaciones de ejemplo...")
+    try:
+        student = user_crud.get_user_by_username(db, username="estudiante")
+
+        s_bib = scene_crud.get_scene_by_key(db, "26-biblioteca")
+        s_entrada = scene_crud.get_scene_by_key(db, "0-entrada")
+
+        created = 0
+
+        if student:
+            conv1 = Conversation(
+                user_id=student.id, 
+                title="Consulta Biblioteca", 
+                scene_id=s_bib.id if s_bib else None, 
+                is_active=True,
+                created_at=datetime.now() - timedelta(days=3)
+            )
+            db.add(conv1)
+            db.commit()
+            db.refresh(conv1)
+            
+            msgs1 = [
+                Message(
+                    conversation_id=conv1.id, 
+                    content="¿La biblioteca tiene préstamo de libros y salas de estudio?", 
+                    is_from_user=True, 
+                    scene_context_id=s_bib.id if s_bib else None,
+                    created_at=datetime.now() - timedelta(days=3, hours=2),
+                    intent_category="servicios",
+                    intent_confidence=0.95,
+                    intent_keywords=["biblioteca", "libros", "préstamo", "estudio", "salas"]
+                ),
+                Message(
+                    conversation_id=conv1.id, 
+                    content="Sí, la biblioteca ofrece préstamo de libros, salas de estudio grupal y acceso a computadoras con bases de datos digitales. El horario es de lunes a viernes de 8am a 8pm.", 
+                    is_from_user=False, 
+                    scene_context_id=s_bib.id if s_bib else None,
+                    created_at=datetime.now() - timedelta(days=3, hours=2, minutes=1)
+                )
+            ]
+            db.add_all(msgs1)
+            db.commit()
+            created += 1
+
+            conv2 = Conversation(
+                user_id=student.id, 
+                title="Ruta al Auditorio", 
+                scene_id=s_entrada.id if s_entrada else None, 
+                is_active=True,
+                created_at=datetime.now() - timedelta(days=2)
+            )
+            db.add(conv2)
+            db.commit()
+            db.refresh(conv2)
+            
+            msgs2 = [
+                Message(
+                    conversation_id=conv2.id, 
+                    content="¿Cómo llego al auditorio desde la entrada?", 
+                    is_from_user=True, 
+                    scene_context_id=s_entrada.id if s_entrada else None,
+                    created_at=datetime.now() - timedelta(days=2, hours=1),
+                    intent_category="navegacion",
+                    intent_confidence=0.9,
+                    intent_keywords=["auditorio", "quiero ir"]
+                ),
+                Message(
+                    conversation_id=conv2.id, 
+                    content="Desde la entrada camina hacia el patio central, luego toma la rampa hacia la izquierda; el auditorio está en el Pabellón 4, segundo piso. Está señalizado.", 
+                    is_from_user=False, 
+                    scene_context_id=s_entrada.id if s_entrada else None,
+                    created_at=datetime.now() - timedelta(days=2, hours=1, minutes=1)
+                )
+            ]
+            db.add_all(msgs2)
+            db.commit()
+            created += 1
+
+        logger.info(f"Seed: {created} conversaciones de ejemplo creadas.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creando conversaciones de ejemplo: {e}")
+        raise
+
 def run_seeder():
     """Ejecutar el seeder basico"""
     logger.info("Iniciando seeder...")
@@ -187,6 +276,19 @@ def run_seeder():
     # Eliminar y crear tablas
     drop_tables()
     create_tables()
+    # Verificar que la tabla 'scenes' exista (evitar errores por metadata incompleta o permisos)
+    try:
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        if not inspector.has_table('scenes'):
+            logger.warning("La tabla 'scenes' no existe después de create_tables(). Reintentando create_all().")
+            create_tables()
+            inspector = inspect(engine)
+            if not inspector.has_table('scenes'):
+                raise RuntimeError("La tabla 'scenes' no pudo ser creada. Revise la conexión y permisos de la BD.")
+    except Exception as ex:
+        logger.error(f"Error verificando/creando tablas: {ex}")
+        raise
     
     # Crear sesión
     db = SessionLocal()
@@ -194,9 +296,12 @@ def run_seeder():
     try:
         # Agregar datos básicos
         seed_users(db)
+        # Agregar escenas básicas
         seed_basic_scenes(db)
         # Agregar knowledge base
         seed_knowledge(db)
+        # Agregar conversaciones de ejemplo
+        seed_example_conversations(db)
         
         # Estadísticas
         total_users = db.query(User).count()

@@ -6,11 +6,11 @@ from app.schemas.user import UserCreate, UserUpdate
 from app.core.security import get_password_hash, verify_password
 
 class UserCRUD:
-    def get_users(self, db: Session, user_id: int) -> Optional[User]:
+    def get_user(self, db: Session, user_id: int) -> Optional[User]:
         """Obtiene un usuario por ID"""
         return db.query(User).filter(User.id == user_id).first()
     
-    def get_user_not_admin(db: Session, skip: int = 0, limit: int = 100):
+    def get_user_not_admin(self, db: Session, skip: int = 0, limit: int = 100):
         return db.query(User).filter(User.is_admin == False).offset(skip).limit(limit).all()
     
     def get_user_by_email(self, db: Session, email: str) -> Optional[User]:

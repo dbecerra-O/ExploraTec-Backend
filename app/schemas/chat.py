@@ -55,6 +55,19 @@ class ConversationBase(BaseModel):
     scene_id: Optional[int] = None
     is_active: bool = True
 
+class ConversationWithMessages(BaseModel):
+    id: int
+    title: Optional[str] = None
+    scene_id: Optional[int] = None
+    is_active: bool = True
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    messages: List[Message] = []
+
+    class Config:
+        from_attributes = True
+
 class ConversationCreate(ConversationBase):
     pass
 
@@ -81,11 +94,10 @@ class Conversation(ConversationBase):
     class Config:
         from_attributes = True
 
-# Schema para crear un mensaje nuevo (incluye lógica de conversación)
 class ChatMessage(BaseModel):
     content: str
-    conversation_id: Optional[int] = None  # Si es None, se crea nueva conversación
-    scene_context: Optional[str] = None  # scene_key de la escena actual
+    conversation_id: Optional[int] = None
+    scene_context: Optional[str] = None
 
 class NavigationInfo(BaseModel):
     from_scene: str
