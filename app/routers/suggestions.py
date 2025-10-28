@@ -45,14 +45,17 @@ SUGGESTED_QUESTIONS = {
 }
 
 @router.get("/")
-def get_suggestions(scene_id: int = None, db: Session = Depends(get_db)):
-    """Obtener preguntas sugeridas según escena"""
+def get_suggestions(scene_context: str = None, db: Session = Depends(get_db)):
+    """Obtener preguntas sugeridas según escena (usar scene_key)
+
+    Parámetro: scene_context = scene_key (ej. "0-entrada").
+    """
     scene_key = None
-    if scene_id:
-        scene = scene_crud.get_scene(db, scene_id)
-        scene_key = scene.scene_key if scene else None
-    
+    if scene_context:
+        # scene_context already a scene_key
+        scene_key = scene_context
+
     return {
-        "scene_id": scene_id,
+        "scene_context": scene_key,
         "suggestions": SUGGESTED_QUESTIONS.get(scene_key, SUGGESTED_QUESTIONS[None])
     }

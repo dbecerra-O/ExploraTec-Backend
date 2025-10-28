@@ -197,8 +197,34 @@ async def get_conversation_details(
     
     if not conversation or conversation.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
-    
-    return conversation
+    def _message_to_dict(msg: Message) -> dict:
+        return {
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "content": msg.content,
+            "is_from_user": msg.is_from_user,
+            "scene_context": msg.scene_context.scene_key if getattr(msg, "scene_context", None) else None,
+            "tokens_used": msg.tokens_used,
+            "created_at": msg.created_at,
+            "feedback": None,
+            "intent_category": getattr(msg, "intent_category", None),
+            "intent_confidence": getattr(msg, "intent_confidence", None),
+            "intent_keywords": getattr(msg, "intent_keywords", None),
+            "requires_clarification": getattr(msg, "requires_clarification", None)
+        }
+
+    conversation_dict = {
+        "id": conversation.id,
+        "title": conversation.title,
+        "scene_id": conversation.scene_id,
+        "is_active": conversation.is_active,
+        "user_id": conversation.user_id,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+        "messages": [_message_to_dict(m) for m in conversation.messages]
+    }
+
+    return conversation_dict
 
 @router.post("/messages/{message_id}/feedback", response_model=MessageFeedback)
 async def create_message_feedback(
@@ -242,7 +268,7 @@ async def get_user_conversations_admin(
 ):
     """Ver todas las conversaciones de un usuario específico (solo admin)"""
 
-    user = user_crud.get_users(db, user_id)
+    user = user_crud.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
@@ -265,7 +291,7 @@ async def get_user_conversations_admin(
     
     return conversations_simple
 
-@router.get("/admin/users/{user_id}/conversations/{conversation_id}/messages", response_model=ConversationSchema)
+@router.get("/admin/users/{user_id}/conversations/{conversation_id}/messages", response_model=ConversationSchema, response_model_exclude_none=True)
 async def get_user_conversation_with_messages(
     user_id: int,
     conversation_id: int,
@@ -274,19 +300,45 @@ async def get_user_conversation_with_messages(
 ):
     """Ver conversación específica de un usuario con TODOS sus mensajes (solo admin)."""
     
-    user = user_crud.get_users(db, user_id)
+    user = user_crud.get_user(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
-    # Verificar que la conversación existe y pertenece al usuario
     conversation = conversation_crud.get_conversation(db, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversación no encontrada")
     
     if conversation.user_id != user_id:
         raise HTTPException(status_code=400, detail="Esta conversación no pertenece al usuario especificado")
-    
-    return conversation
+
+    def _message_to_dict(msg: Message) -> dict:
+        return {
+            "id": msg.id,
+            "conversation_id": msg.conversation_id,
+            "content": msg.content,
+            "is_from_user": msg.is_from_user,
+            "scene_context": msg.scene_context.scene_key if getattr(msg, "scene_context", None) else None,
+            "tokens_used": msg.tokens_used,
+            "created_at": msg.created_at,
+            "feedback": None,
+            "intent_category": getattr(msg, "intent_category", None),
+            "intent_confidence": getattr(msg, "intent_confidence", None),
+            "intent_keywords": getattr(msg, "intent_keywords", None),
+            "requires_clarification": getattr(msg, "requires_clarification", None)
+        }
+
+    conversation_dict = {
+        "id": conversation.id,
+        "title": conversation.title,
+        "scene_id": conversation.scene_id,
+        "is_active": conversation.is_active,
+        "user_id": conversation.user_id,
+        "created_at": conversation.created_at,
+        "updated_at": conversation.updated_at,
+        "messages": [_message_to_dict(m) for m in conversation.messages]
+    }
+
+    return conversation_dict
 
 @router.get("/admin/analytics/overview")
 async def get_chat_analytics(
@@ -388,7 +440,7 @@ async def get_low_confidence_intents(
 async def get_all_messages_admin(
     skip: int = 0,
     limit: int = 50,
-    scene_id: Optional[int] = None,
+    scene_context: Optional[str] = None,
     intent_category: Optional[str] = None,
     min_confidence: Optional[float] = None,
     only_user_messages: bool = True,
@@ -414,8 +466,12 @@ async def get_all_messages_admin(
     if only_user_messages:
         query = query.filter(Message.is_from_user == True)
     
-    if scene_id is not None:
-        query = query.filter(Message.scene_context_id == scene_id)
+    # Filtrar por scene_key si se proporciona
+    if scene_context is not None:
+        scene = scene_crud.get_scene_by_key(db, scene_context)
+        scene_id = scene.id if scene else None
+        if scene_id is not None:
+            query = query.filter(Message.scene_context_id == scene_id)
     
     if intent_category:
         query = query.filter(Message.intent_category == intent_category)

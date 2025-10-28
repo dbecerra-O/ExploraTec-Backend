@@ -263,6 +263,78 @@ def seed_example_conversations(db: Session):
             db.commit()
             created += 1
 
+            # Conversación 3: Horario del polideportivo
+            s_poli = scene_crud.get_scene_by_key(db, "6-polideportivo")
+            conv3 = Conversation(
+                user_id=student.id,
+                title="Horario Polideportivo",
+                scene_id=s_poli.id if s_poli else None,
+                is_active=True,
+                created_at=datetime.now() - timedelta(days=1)
+            )
+            db.add(conv3)
+            db.commit()
+            db.refresh(conv3)
+
+            msgs3 = [
+                Message(
+                    conversation_id=conv3.id,
+                    content="¿Cuál es el horario del polideportivo?",
+                    is_from_user=True,
+                    scene_context_id=s_poli.id if s_poli else None,
+                    created_at=datetime.now() - timedelta(days=1, hours=2),
+                    intent_category="servicios",
+                    intent_confidence=0.88,
+                    intent_keywords=["polideportivo", "horario"]
+                ),
+                Message(
+                    conversation_id=conv3.id,
+                    content="El polideportivo está abierto de Lunes a Viernes de 7am a 9pm; los fines de semana tiene horario reducido.",
+                    is_from_user=False,
+                    scene_context_id=s_poli.id if s_poli else None,
+                    created_at=datetime.now() - timedelta(days=1, hours=1, minutes=50)
+                )
+            ]
+            db.add_all(msgs3)
+            db.commit()
+            created += 1
+
+            # Conversación 4: Salones y carreras
+            s_tec = scene_crud.get_scene_by_key(db, "7-area-de-tecnologia")
+            conv4 = Conversation(
+                user_id=student.id,
+                title="Docentes Tecnología",
+                scene_id=s_tec.id if s_tec else None,
+                is_active=True,
+                created_at=datetime.now() - timedelta(hours=12)
+            )
+            db.add(conv4)
+            db.commit()
+            db.refresh(conv4)
+
+            msgs4 = [
+                Message(
+                    conversation_id=conv4.id,
+                    content="Que docentes conoces de la area de Tecnologia Digital?",
+                    is_from_user=True,
+                    scene_context_id=s_tec.id if s_tec else None,
+                    created_at=datetime.now() - timedelta(hours=11),
+                    intent_category="informacion",
+                    intent_confidence=0.92,
+                    intent_keywords=["docentes", "tecnologia digital"]
+                ),
+                Message(
+                    conversation_id=conv4.id,
+                    content="En Tecnología Digital hay docentes como Silvia Montoya y Jaime Gomez. También se imparten cursos de desarrollo y redes.",
+                    is_from_user=False,
+                    scene_context_id=s_tec.id if s_tec else None,
+                    created_at=datetime.now() - timedelta(hours=10, minutes=50)
+                )
+            ]
+            db.add_all(msgs4)
+            db.commit()
+            created += 1
+
         logger.info(f"Seed: {created} conversaciones de ejemplo creadas.")
     except Exception as e:
         db.rollback()
