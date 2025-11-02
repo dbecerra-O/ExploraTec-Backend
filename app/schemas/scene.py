@@ -4,6 +4,8 @@ from pydantic import BaseModel
 class SceneBase(BaseModel):
     scene_key: str
     name: str
+    is_relevant: bool = False
+
 
 class SceneCreate(SceneBase):
     pass
@@ -11,6 +13,7 @@ class SceneCreate(SceneBase):
 class SceneUpdate(BaseModel):
     scene_key: str = None
     name: str = None
+    is_relevant: bool = None
 
 class Scene(SceneBase):
     id: int

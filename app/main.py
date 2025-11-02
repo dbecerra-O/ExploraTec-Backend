@@ -2,27 +2,24 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import uvicorn
 
 from app.routers import auth, users, admin, chatbot, user_scenes, suggestions, notes, events
 from app.dependencies import get_current_active_user, get_current_admin_user
 from app.models.user import User
-from app.utils.seeder import run_seeder
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Lifespan event handler para ejecutar el seeder al inicio
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Iniciando aplicación...")
     try:
-        # Ejecutar seeder al iniciar la aplicación
-        run_seeder()
-        logger.info("Seeder ejecutado correctamente")
+        pass
     except Exception as e:
-        logger.error(f"Error ejecutando seeder: {e}")
+        logger.error(f"Error en el procedimiento de inicio: {e}")
     
     yield    
     # Shutdown
@@ -39,7 +36,7 @@ app = FastAPI(
 # Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especifica los dominios permitidos
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +46,7 @@ app.add_middleware(
 for router in [auth, users, admin, chatbot, user_scenes, suggestions, notes, events]:
     app.include_router(router.router)
 
-# Rutas de ejemplo para probar la autenticación
+# Rutas de ejemplo
 @app.get("/")
 async def root():
     """Endpoint público de bienvenida"""
@@ -91,5 +88,4 @@ async def health_check():
     return {"status": "healthy", "message": "La aplicación está funcionando correctamente"}
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

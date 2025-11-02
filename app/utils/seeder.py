@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from app.database import engine, SessionLocal
+from app.database import drop_all_tables
 from app.models.user import User
 from app.models.scene import Scene
 from app.models.chat import Conversation, Message
@@ -9,7 +10,9 @@ from app.schemas.user import UserCreate
 from app.schemas.scene import SceneCreate
 from app.models.knowledge import KnowledgeBase
 from app.services.embeddings import embed_texts, get_openai_client
-
+import app.models.note
+from app.crud.event import event_crud
+from app.schemas.event import EventCreate
 import logging
 from datetime import datetime, timedelta
 
@@ -19,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 def drop_tables():
     """Eliminar todas las tablas"""
-    from app.database import drop_all_tables
     drop_all_tables()
 
 def create_tables():
@@ -36,35 +38,35 @@ def seed_basic_scenes(db: Session):
     """Crear escenas"""
     
     scenes_data = [
-        {"scene_key": "0-entrada", "name": "Entrada"},
-        {"scene_key": "1-patio-central", "name": "Patio Central"},
-        {"scene_key": "2-camino", "name": "Camino"},
-        {"scene_key": "3-pabellon-4---piso-2-s", "name": "Pabellón 4 - Piso 2-S"},
-        {"scene_key": "4-pabellon-7", "name": "Pabellón 7"},
-        {"scene_key": "5-area-de-salones-4b", "name": "Área de Salones 4B"},
-        {"scene_key": "6-polideportivo", "name": "Polideportivo"},
-        {"scene_key": "7-area-de-tecnologia", "name": "Área de Tecnología"},
-        {"scene_key": "8-area-de-mecanica", "name": "Área de Mecánica"},
-        {"scene_key": "9-mecanica", "name": "Mecánica"},
-        {"scene_key": "10-segundo-piso-e", "name": "Segundo Piso E"},
-        {"scene_key": "11-segundo-piso-s", "name": "Segundo Piso S"},
-        {"scene_key": "12-zona-verde", "name": "Zona Verde"},
-        {"scene_key": "13-cerca-del-ajedrez", "name": "Cerca del Ajedrez"},
-        {"scene_key": "14-salon-701", "name": "Salón 701"},
-        {"scene_key": "15-salones-de-mecanica", "name": "Salones de Mecánica"},
-        {"scene_key": "16-salon-702", "name": "Salón 702"},
-        {"scene_key": "17-salon-704", "name": "Salón 704"},
-        {"scene_key": "18-maquinitas", "name": "Maquinitas"},
-        {"scene_key": "19-pabellon-4---piso-2-e", "name": "Pabellón 4 - Piso 2-E"},
-        {"scene_key": "20-pabellon-4---piso-2-m", "name": "Pabellón 4 - Piso 2-M"},
-        {"scene_key": "21-pabellon-4---piso-2--a", "name": "Pabellón 4 - Piso 2-A"},
-        {"scene_key": "22-pabellon-4---piso-1", "name": "Pabellón 4 - Piso 1"},
-        {"scene_key": "23-salon-pabellon-4", "name": "Salón Pabellón 4"},
-        {"scene_key": "24-pabellon-4", "name": "Pabellón 4"},
-        {"scene_key": "25-entrada-biblioteca", "name": "Entrada Biblioteca"},
-        {"scene_key": "26-biblioteca", "name": "Biblioteca"},
-        {"scene_key": "27-pabellon-14", "name": "Pabellón 14"},
-        {"scene_key": "28-salon-1509", "name": "Salón 1509"}
+        {"scene_key": "0-entrada", "name": "Entrada", "is_relevant": True},
+        {"scene_key": "1-patio-central", "name": "Patio Central", "is_relevant": True},
+        {"scene_key": "2-camino", "name": "Camino", "is_relevant": False},
+        {"scene_key": "3-pabellon-4---piso-2-s", "name": "Pabellón 4 - Piso 2-S", "is_relevant": False},
+        {"scene_key": "4-pabellon-7", "name": "Pabellón 7", "is_relevant": False},
+        {"scene_key": "5-area-de-salones-4b", "name": "Área de Salones 4B", "is_relevant": False},
+        {"scene_key": "6-polideportivo", "name": "Polideportivo", "is_relevant": True},
+        {"scene_key": "7-area-de-tecnologia", "name": "Área de Tecnología", "is_relevant": False},
+        {"scene_key": "8-area-de-mecanica", "name": "Área de Mecánica", "is_relevant": False},
+        {"scene_key": "9-mecanica", "name": "Mecánica", "is_relevant": False},
+        {"scene_key": "10-segundo-piso-e", "name": "Segundo Piso E", "is_relevant": False},
+        {"scene_key": "11-segundo-piso-s", "name": "Segundo Piso S", "is_relevant": False},
+        {"scene_key": "12-zona-verde", "name": "Zona Verde", "is_relevant": False},
+        {"scene_key": "13-cerca-del-ajedrez", "name": "Cerca del Ajedrez", "is_relevant": False},
+        {"scene_key": "14-salon-701", "name": "Salón 701", "is_relevant": False},
+        {"scene_key": "15-salones-de-mecanica", "name": "Salones de Mecánica", "is_relevant": False},
+        {"scene_key": "16-salon-702", "name": "Salón 702", "is_relevant": False},
+        {"scene_key": "17-salon-704", "name": "Salón 704", "is_relevant": False},
+        {"scene_key": "18-maquinitas", "name": "Maquinitas", "is_relevant": False},
+        {"scene_key": "19-pabellon-4---piso-2-e", "name": "Pabellón 4 - Piso 2-E", "is_relevant": False},
+        {"scene_key": "20-pabellon-4---piso-2-m", "name": "Pabellón 4 - Piso 2-M", "is_relevant": False},
+        {"scene_key": "21-pabellon-4---piso-2--a", "name": "Pabellón 4 - Piso 2-A", "is_relevant": False},
+        {"scene_key": "22-pabellon-4---piso-1", "name": "Pabellón 4 - Piso 1", "is_relevant": False},
+        {"scene_key": "23-salon-pabellon-4", "name": "Salón Pabellón 4", "is_relevant": False},
+        {"scene_key": "24-pabellon-4", "name": "Pabellón 4", "is_relevant": True},
+        {"scene_key": "25-entrada-biblioteca", "name": "Entrada Biblioteca", "is_relevant": False},
+        {"scene_key": "26-biblioteca", "name": "Biblioteca", "is_relevant": True},
+        {"scene_key": "27-pabellon-14", "name": "Pabellón 14", "is_relevant": False},
+        {"scene_key": "28-salon-1509", "name": "Salón 1509", "is_relevant": False}
     ]
     
     for scene_data in scenes_data:
@@ -72,6 +74,63 @@ def seed_basic_scenes(db: Session):
         if not existing:
             scene = scene_crud.create_scene(db, SceneCreate(**scene_data))
             logger.info(f"Escena creada: {scene.scene_key} - {scene.name}")
+
+
+def seed_events(db: Session):
+    """Crear 4 eventos de ejemplo y asociarlos a escenas relevantes."""
+    logger.info("Creando eventos de ejemplo...")
+    try:
+        events_data = [
+            {
+                "title": "Feria Tecnológica",
+                "description": "Feria con proyectos estudiantiles y demostraciones.",
+                "event_date": datetime.now() + timedelta(days=7),
+                "location": "Pabellón 4",
+                "scene_key": "24-pabellon-4"
+            },
+            {
+                "title": "Charla de Admisiones",
+                "description": "Información sobre carreras y proceso de admisión.",
+                "event_date": datetime.now() + timedelta(days=14),
+                "location": "Biblioteca",
+                "scene_key": "26-biblioteca"
+            },
+            {
+                "title": "Taller de Robótica",
+                "description": "Taller práctico para introducir robótica educativa.",
+                "event_date": datetime.now() + timedelta(days=10),
+                "location": "Área de Tecnología",
+                "scene_key": "7-area-de-tecnologia"
+            },
+            {
+                "title": "Concierto de Bienvenida",
+                "description": "Evento musical para dar la bienvenida a los nuevos alumnos.",
+                "event_date": datetime.now() + timedelta(days=3),
+                "location": "Patio Central",
+                "scene_key": "1-patio-central"
+            }
+        ]
+
+        created = 0
+        for ev in events_data:
+            scene = scene_crud.get_scene_by_key(db, ev["scene_key"]) if ev.get("scene_key") else None
+            ev_create = EventCreate(
+                title=ev["title"],
+                description=ev.get("description"),
+                event_date=ev["event_date"],
+                location=ev.get("location"),
+                scene_id=scene.id if scene else None
+            )
+            try:
+                event_crud.create_event(db, ev_create)
+                created += 1
+            except Exception as e:
+                logger.error(f"Error creando evento '{ev['title']}': {e}")
+
+        logger.info(f"{created} eventos creados.")
+    except Exception as e:
+        logger.error(f"Error en seed_events: {e}")
+        raise
 
 def seed_users(db: Session):
     """Crear usuarios"""
@@ -165,7 +224,6 @@ def seed_knowledge(db: Session):
 
     # Si hay clave de OpenAI, intentar generar embeddings en batch y guardarlos
     try:
-        # Esto verifica si la variable de entorno está presente y si el cliente puede inicializarse
         get_openai_client()
         texts = [k.content for k in created_kbs]
         if texts:
@@ -176,16 +234,15 @@ def seed_knowledge(db: Session):
             db.commit()
             logger.info("Embeddings generados y guardados para entries seed.")
     except Exception as e:
-        # No crítico: si falla, las filas quedan sin embedding y se pueden calcular luego
         logger.warning(f"No se pudieron generar embeddings en el seeder: {e}")
 
-    logger.info(f"✅ {added} entradas de knowledge_base creadas.")
+    logger.info(f"{added} entradas de knowledge_base creadas.")
 
 def seed_example_conversations(db: Session):
     """Crear 4 conversaciones de ejemplo con mensajes (usuario + asistente)."""
     from app.crud.scene import scene_crud
 
-    logger.info("Seed: creando conversaciones de ejemplo...")
+    logger.info("creando conversaciones de ejemplo...")
     try:
         student = user_crud.get_user_by_username(db, username="estudiante")
 
@@ -335,7 +392,7 @@ def seed_example_conversations(db: Session):
             db.commit()
             created += 1
 
-        logger.info(f"Seed: {created} conversaciones de ejemplo creadas.")
+        logger.info(f"{created} conversaciones de ejemplo creadas.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error creando conversaciones de ejemplo: {e}")
@@ -348,7 +405,6 @@ def run_seeder():
     # Eliminar y crear tablas
     drop_tables()
     create_tables()
-    # Verificar que la tabla 'scenes' exista (evitar errores por metadata incompleta o permisos)
     try:
         from sqlalchemy import inspect
         inspector = inspect(engine)
@@ -370,6 +426,8 @@ def run_seeder():
         seed_users(db)
         # Agregar escenas básicas
         seed_basic_scenes(db)
+        # Agregar eventos de ejemplo
+        seed_events(db)
         # Agregar knowledge base
         seed_knowledge(db)
         # Agregar conversaciones de ejemplo

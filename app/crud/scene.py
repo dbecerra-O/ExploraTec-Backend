@@ -20,7 +20,8 @@ class SceneCRUD:
         """Crea una nueva escena"""
         db_scene = Scene(
             scene_key=scene.scene_key,
-            name=scene.name
+            name=scene.name,
+            is_relevant=getattr(scene, 'is_relevant', False)
         )
         db.add(db_scene)
         db.commit()

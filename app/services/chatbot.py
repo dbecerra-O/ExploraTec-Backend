@@ -45,8 +45,8 @@ def check_rate_limit(db: Session, user_id: int) -> tuple[bool, Optional[str]]:
         Message.is_from_user == True,
         Message.created_at >= one_hour_ago
     ).count()
-    if recent_messages >= 10:
-        return False, f"Has alcanzado el límite de {10} mensajes por hora. Intenta más tarde."
+    if recent_messages >= 15:
+        return False, f"Has alcanzado el límite de {15} mensajes por hora. Intenta más tarde."
     return True, None
 
 def check_conversation_limit(db: Session, conversation_id: int) -> tuple[bool, Optional[str]]:
@@ -249,25 +249,41 @@ def retrieve_knowledge_context(
     db: Session,
     query: str,
     scene_id: Optional[int]
-) -> Optional[str]:
-    """Recupera contexto relevante de la knowledge base usando RAG"""
+) -> Optional[dict]:
+    """Recupera contexto relevante de la knowledge base usando RAG.
+
+    Devuelve dict con:
+      - 'text': string combinado para inyectar en el prompt (o None)
+      - 'events': lista cruda de eventos (o None)
+    """
     try:
         passages = retrieve_similar_passages(
             db, query, top_k=4, scene_id=scene_id
         )
         knowledge_context = format_retrieved_passages(passages)
-        
+
         events_context = search_events_context(db, query, scene_id)
-        
-        if knowledge_context and events_context:
-            return f"{knowledge_context}\n\n{events_context}"
-        elif knowledge_context:
-            return knowledge_context
-        elif events_context:
-            return events_context
+
+        events_text = None
+        events_list = None
+        if isinstance(events_context, dict):
+            events_text = events_context.get("text")
+            events_list = events_context.get("events")
         else:
-            return None
-        
+            events_text = events_context
+
+        combined_text = None
+        if knowledge_context and events_text:
+            combined_text = f"{knowledge_context}\n\n{events_text}"
+        elif knowledge_context:
+            combined_text = knowledge_context
+        elif events_text:
+            combined_text = events_text
+        else:
+            combined_text = None
+
+        return {"text": combined_text, "events": events_list}
+
     except Exception as e:
         print(f"⚠️ Error en RAG retrieval: {e}")
         db.rollback()

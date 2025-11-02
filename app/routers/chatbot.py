@@ -1,5 +1,6 @@
 import time
 from typing import List, Optional
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -56,6 +57,18 @@ async def send_message(
     )
 
     intent_result = IntentDetector.detect_intent(message.content)
+    try:
+        message_text = (message.content or "").strip().lower()
+        if scene_id and re.search(r"\bq(ue|u[eé])?\s*(e\s*)?hay\s+a?qui\b", message_text):
+            intent_result = {
+                "category": "informacion_ubicacion",
+                "confidence": 0.95,
+                "keywords_found": ["que hay aqui"],
+                "requires_clarification": False,
+                "all_matches": [("informacion_ubicacion", 0.95)]
+            }
+    except Exception:
+        pass
     
     # Crear mensaje del usuario
     user_message = message_crud.create_user_message_with_intent(
@@ -91,6 +104,15 @@ async def send_message(
         scene_id=scene_id
     )
 
+    # retrieved_context is now possibly a dict: {"text": str|None, "events": list|None}
+    retrieved_context_text = None
+    retrieved_events = None
+    if isinstance(retrieved_context, dict):
+        retrieved_context_text = retrieved_context.get("text")
+        retrieved_events = retrieved_context.get("events")
+    else:
+        retrieved_context_text = retrieved_context
+
     scene_context = get_scene_context(db, scene_id)
     conversation_history = get_conversation_history(db, conversation.id)
     
@@ -98,7 +120,7 @@ async def send_message(
         user_message=message.content.strip(),
         scene_context=scene_context,
         conversation_history=conversation_history,
-        retrieved_context=retrieved_context
+        retrieved_context=retrieved_context_text
     )
     
     # Crear mensaje del asistente

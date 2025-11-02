@@ -234,8 +234,11 @@ def search_events(db: Session, query: str, scene_id: Optional[int] = None) -> Li
         print(f"⚠️ Error en search_events: {e}")
         return []
     
-def search_events_context(db: Session, query: str, scene_id: Optional[int] = None) -> Optional[str]:
-    """Busca eventos relevantes y los formatea como contexto.
+def search_events_context(db: Session, query: str, scene_id: Optional[int] = None) -> Optional[dict]:
+    """Busca eventos relevantes y devuelve:
+
+    - una versión formateada en 'text' pensada para inyectar en el prompt de la IA
+    - una lista cruda en 'events' con campos JSON-friendly para el frontend
 
     Prioriza eventos de la escena; si no hay eventos y la query sugiere 'global', buscará globalmente.
     """
@@ -259,14 +262,29 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
         if not events:
             return None
 
+        # preparar lista cruda
+        events_list = []
+        for ev in events:
+            events_list.append({
+                "id": getattr(ev, "id", None),
+                "title": getattr(ev, "title", None),
+                "description": getattr(ev, "description", None),
+                "event_date": getattr(ev, "event_date", None).isoformat() if getattr(ev, "event_date", None) else None,
+                "location": getattr(ev, "location", None),
+                "scene_id": getattr(ev, "scene_id", None),
+                "is_active": getattr(ev, "is_active", None)
+            })
+
+        # versión formateada para prompt (hasta 3)
         events_text = "📅 **Eventos próximos:**\n\n"
         for event in events[:3]:
-            events_text += f"• **{event.title}**\n"
-            events_text += f"  📍 {event.location or 'Ubicación por definir'}\n"
-            events_text += f"  🕒 {event.event_date.strftime('%d/%m/%Y %H:%M')}\n"
-            events_text += f"  📝 {event.description[:150]}...\n\n"
+            events_text += f"• {event.title}\n"
+            events_text += f"  {event.location or 'Ubicación por definir'}\n"
+            events_text += f"  {event.event_date.strftime('%d/%m/%Y %H:%M')}\n"
+            if event.description:
+                events_text += f"  {event.description[:150]}...\n\n"
 
-        return events_text.strip()
+        return {"text": events_text.strip(), "events": events_list}
 
     except Exception as e:
         print(f"⚠️ Error buscando eventos: {e}")

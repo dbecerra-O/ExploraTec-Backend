@@ -15,11 +15,11 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Escena actual (usando string reference para evitar import circular)
+    # Escena actual
     current_scene_id = Column(Integer, ForeignKey("scenes.id"), nullable=True)
     current_scene = relationship("Scene", foreign_keys=[current_scene_id])
     
-    # Relación con conversaciones (usando string reference)
+    # Relación con conversaciones
     conversations = relationship("Conversation", back_populates="user")
     notes = relationship("Note", back_populates="user")
     
