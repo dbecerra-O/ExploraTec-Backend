@@ -22,7 +22,7 @@ class Settings:
             "port": url.port or 5432,
             "user": url.username,
             "password": url.password,
-            "database": url.path[1:],  # Remove leading slash
+            "database": url.path[1:],
         }
 
 settings = Settings()

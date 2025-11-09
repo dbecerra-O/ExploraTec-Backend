@@ -16,7 +16,6 @@ from app.schemas.event import EventCreate
 import logging
 from datetime import datetime, timedelta
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -96,6 +95,13 @@ def seed_events(db: Session):
                 "scene_key": "26-biblioteca"
             },
             {
+                "title": "Feria de Libros",
+                "description": "Compra y renta de libros académicos y de interés general.",
+                "event_date": datetime.now() + timedelta(days=7),
+                "location": "Biblioteca",
+                "scene_key": "26-biblioteca"
+            },
+            {
                 "title": "Taller de Robótica",
                 "description": "Taller práctico para introducir robótica educativa.",
                 "event_date": datetime.now() + timedelta(days=10),
@@ -163,7 +169,6 @@ def seed_users(db: Session):
 
 def seed_knowledge(db: Session):
     """Agregar entradas de ejemplo a la base de conocimiento (knowledge_base)"""
-    # Obtener algunas escenas para relacionar contenido si aplica
     biblioteca = scene_crud.get_scene_by_key(db, "26-biblioteca")
     poli = scene_crud.get_scene_by_key(db, "6-polideportivo")
     pabellon7 = scene_crud.get_scene_by_key(db, "4-pabellon-7")
@@ -202,7 +207,6 @@ def seed_knowledge(db: Session):
     ]
 
     added = 0
-    # Primero insertar filas sin embeddings
     created_kbs = []
     for entry in knowledge_entries:
         kb = KnowledgeBase(
@@ -320,7 +324,6 @@ def seed_example_conversations(db: Session):
             db.commit()
             created += 1
 
-            # Conversación 3: Horario del polideportivo
             s_poli = scene_crud.get_scene_by_key(db, "6-polideportivo")
             conv3 = Conversation(
                 user_id=student.id,
@@ -356,7 +359,6 @@ def seed_example_conversations(db: Session):
             db.commit()
             created += 1
 
-            # Conversación 4: Salones y carreras
             s_tec = scene_crud.get_scene_by_key(db, "7-area-de-tecnologia")
             conv4 = Conversation(
                 user_id=student.id,
@@ -402,7 +404,6 @@ def run_seeder():
     """Ejecutar el seeder basico"""
     logger.info("Iniciando seeder...")
     
-    # Eliminar y crear tablas
     drop_tables()
     create_tables()
     try:
@@ -418,7 +419,6 @@ def run_seeder():
         logger.error(f"Error verificando/creando tablas: {ex}")
         raise
     
-    # Crear sesión
     db = SessionLocal()
     
     try:
@@ -428,12 +428,11 @@ def run_seeder():
         seed_basic_scenes(db)
         # Agregar eventos de ejemplo
         seed_events(db)
-        # Agregar knowledge base
+        # Agregar conocimiento base
         seed_knowledge(db)
         # Agregar conversaciones de ejemplo
         seed_example_conversations(db)
         
-        # Estadísticas
         total_users = db.query(User).count()
         total_scenes = db.query(Scene).count()
         

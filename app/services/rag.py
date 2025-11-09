@@ -1,7 +1,9 @@
 from typing import List, Dict, Optional, Any
+from datetime import datetime as _dt
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import math
+
 
 from app.models.knowledge import KnowledgeBase, Event
 from app.services.embeddings import embed_text
@@ -106,7 +108,6 @@ def retrieve_similar_passages(db: Session, query: str, top_k: int = 2, scene_id:
             vector_results = [r for r in vector_results if r["distance"] <= distance_threshold]
         vector_results = vector_results[:top_k]
 
-    # Keyword search: prefer resultados de la escena y completar con global si hace falta
     keyword_results = []
     try:
         if scene_id is not None:
@@ -208,27 +209,24 @@ def search_events(db: Session, query: str, scene_id: Optional[int] = None) -> Li
     """Busca eventos relevantes basados en la consulta"""
     try:
         from datetime import datetime
-        
-        search_terms = query.lower().split()
-        query_scene = db.query(Event).filter(
+        search_terms = (query or "").lower().split()
+
+        query_ev = db.query(Event).filter(
             Event.is_active == True,
-            Event.event_date >= datetime.now(),
             Event.scene_id == scene_id
-        )
+        ) if scene_id is not None else db.query(Event).filter(Event.is_active == True)
+
+        events_all = query_ev.all()
 
         events_found = []
-        for event in query_scene.all():
-            event_text = f"{event.title} {event.description} {event.location}".lower()
-            matches = sum(1 for term in search_terms if term in event_text)
-            if matches > 0:
-                events_found.append((event, matches))
+        for event in events_all:
+            event_text = f"{event.title or ''} {event.description or ''} {event.location or ''}".lower()
+            matches = sum(1 for term in search_terms if term in event_text) if search_terms else 0
+            events_found.append((event, matches))
+        events_found.sort(key=lambda x: ( -x[1], abs((x[0].event_date - _dt.now()).total_seconds()) if x[0].event_date else 1e9 ))
 
-        events_found.sort(key=lambda x: x[1], reverse=True)
-
-        if events_found:
-            return [event for event, score in events_found[:2]]
-
-        return []
+        # Devolver hasta 5 candidatos relevantes
+        return [event for event, score in events_found[:5]]
     
     except Exception as e:
         print(f"⚠️ Error en search_events: {e}")
@@ -262,29 +260,51 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
         if not events:
             return None
 
-        # preparar lista cruda
+        # preparar lista cruda con clasificación pasado/por venir
+        from datetime import datetime
+        now = datetime.now()
         events_list = []
+        upcoming = []
+        past = []
         for ev in events:
+            ev_date = getattr(ev, "event_date", None)
+            is_upcoming = ev_date and ev_date >= now
             events_list.append({
                 "id": getattr(ev, "id", None),
                 "title": getattr(ev, "title", None),
                 "description": getattr(ev, "description", None),
-                "event_date": getattr(ev, "event_date", None).isoformat() if getattr(ev, "event_date", None) else None,
+                "event_date": ev_date.isoformat() if ev_date else None,
                 "location": getattr(ev, "location", None),
                 "scene_id": getattr(ev, "scene_id", None),
-                "is_active": getattr(ev, "is_active", None)
+                "is_active": getattr(ev, "is_active", None),
+                "status": "upcoming" if is_upcoming else "past"
             })
+            if is_upcoming:
+                upcoming.append(ev)
+            else:
+                past.append(ev)
 
-        # versión formateada para prompt (hasta 3)
-        events_text = "📅 **Eventos próximos:**\n\n"
-        for event in events[:3]:
-            events_text += f"• {event.title}\n"
-            events_text += f"  {event.location or 'Ubicación por definir'}\n"
-            events_text += f"  {event.event_date.strftime('%d/%m/%Y %H:%M')}\n"
-            if event.description:
-                events_text += f"  {event.description[:150]}...\n\n"
+        # versión formateada para prompt: incluir próximos y pasados
+        events_text_parts = []
+        if upcoming:
+            part = "📅 Eventos próximos:\n\n"
+            for event in upcoming[:5]:
+                ev_date = event.event_date
+                part += f"• {event.title} — {event.location or 'Ubicación por definir'} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
+                if event.description:
+                    part += f"  {event.description[:200]}\n"
+            events_text_parts.append(part.strip())
 
-        return {"text": events_text.strip(), "events": events_list}
+        if past:
+            part = "📜 Eventos pasados:\n\n"
+            for event in past[:5]:
+                ev_date = event.event_date
+                part += f"• {event.title} — {event.location or 'Ubicación por definir'} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
+            events_text_parts.append(part.strip())
+
+        events_text = "\n\n".join(events_text_parts) if events_text_parts else None
+
+        return {"text": events_text, "events": events_list}
 
     except Exception as e:
         print(f"⚠️ Error buscando eventos: {e}")

@@ -171,7 +171,7 @@ class SceneGraph:
         # Polideportivo
         "polideportivo": "6-polideportivo",
         "poli": "6-polideportivo",
-        "gimnasio": "6-polideportivo",
+        "cancha": "6-polideportivo",
         "deportes": "6-polideportivo",
         
         # Áreas

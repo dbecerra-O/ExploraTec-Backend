@@ -119,13 +119,13 @@ def generate_ai_response(user_message: str, scene_context: str = None,
             "- Instalaciones del campus (laboratorios, biblioteca, deportes)\n"
             "- Vida estudiantil y servicios\n"
             "- Horarios y calendario académico\n"
-            # NUEVO: Instrucción de corrección ortográfica
-            "IMPORTANTE: Si detectas errores ortográficos en nombres de lugares, "
-            "corrige automáticamente en tu respuesta.\n"
+            "IMPORTANTE: Si detectas errores ortográficos en nombres de lugares, corrige automáticamente en tu respuesta.\n"
             "Responde de manera natural, amistosa y concisa en español. Prioriza la información proporcionada en la sección [INFORMACION_RETRIEVED] si está presente.\n"
             "Si el usuario pregunta por eventos en general (sin especificar escena), ofrece un resumen general de eventos.\n"
             "Si el usuario está en una escena específica (se proporcionó contexto de escena), prioriza y resume los eventos de esa escena.\n"
             "Si detectas múltiples intenciones (por ejemplo navegación + eventos), atiende primero la intención informativa y luego sugiere acciones de navegación cortas.\n"
+            "IMPORTANTE: SOLO RESPONDE INFORMACIÓN RELACIONADA A TECSUP LIMA. No inventes eventos, horarios, ubicaciones ni información de otras instituciones. Si la pregunta trata sobre otra institución, indica que no tienes información de esa entidad.\n"
+            "EVITA lenguaje inapropiado, groserías o insultos en TODAS las respuestas. Si el usuario usa lenguaje ofensivo, responde de forma profesional y neutral sin reproducir insultos.\n"
             "Si no tienes información específica, ofrece ayuda general y sugiere contactar a la administración."
         )
 
@@ -149,12 +149,13 @@ def generate_ai_response(user_message: str, scene_context: str = None,
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            max_tokens=300,
-            temperature=0.7,
+            max_tokens=512,
+            temperature=0.4,
         )
 
         result = response.choices[0].message.content.strip()
         total_tokens = response.usage.total_tokens
+
         return result, total_tokens
 
     except openai.RateLimitError:
@@ -175,8 +176,8 @@ def generate_conversation_title(message_content: str) -> str:
                 {"role": "system", "content": "Genera un título corto y descriptivo (máx. 6 palabras). Corrígelo si tiene errores ortográficos."},
                 {"role": "user", "content": message_content}
             ],
-            max_tokens=15,
-            temperature=0.5
+            max_tokens=30,
+            temperature=1
         )
         if response.choices:
             return response.choices[0].message.content.strip()

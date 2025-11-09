@@ -21,8 +21,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Error en el procedimiento de inicio: {e}")
     
-    yield    
-    # Shutdown
+    yield
     logger.info("Cerrando aplicación...")
 
 # Crear la aplicación FastAPI
@@ -81,7 +80,6 @@ async def admin_only_route(current_admin: User = Depends(get_current_admin_user)
         }
     }
 
-# Health check
 @app.get("/health")
 async def health_check():
     """Endpoint para verificar el estado de la aplicación"""

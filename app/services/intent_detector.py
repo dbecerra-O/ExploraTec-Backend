@@ -42,7 +42,7 @@ class IntentDetector:
             ],
             "medium_priority": [
                 "donde esta", "donde queda", "ubicacion",
-                "ir a", "ir al", "voy a"
+                "ir a", "ir al", "voy a", "a la"
             ],
             "low_priority": ["llegar", "cerca"]
         },
