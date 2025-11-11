@@ -44,3 +44,4 @@ migrations/*.pyc
 # --- Otros ---
 .DS_Store
 Thumbs.db
+seeder.py

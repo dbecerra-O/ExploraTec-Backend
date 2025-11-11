@@ -23,10 +23,8 @@ def drop_all_tables():
         logger.info("Tablas eliminadas correctamente")
     except Exception as e:
         logger.error(f"Error eliminando tablas: {e}")
-        # Intentar eliminar las tablas si falla el primero
         try:
             with engine.connect() as conn:
-                # Obtener todas las tablas y eliminarlas una por una
                 result = conn.execute(text("""
                     SELECT tablename FROM pg_tables 
                     WHERE schemaname = 'public' 
@@ -44,7 +42,6 @@ def drop_all_tables():
             logger.error(f"Error: {e2}")
             raise
 
-# Dependency para obtener la sesión de la base de datos
 def get_db():
     db = SessionLocal()
     try:

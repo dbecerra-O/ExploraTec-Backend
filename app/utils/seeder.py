@@ -181,7 +181,13 @@ def seed_knowledge(db: Session):
             "scene_id": biblioteca.id if biblioteca else None
         },
         {
-            "content": "El polideportivo tiene cancha de fútbol, básquet, gimnasio y vestuarios. Horario: Lunes a Viernes 7am-9pm.",
+            "content": "El polideportivo tiene cancha de fútbol, básquet, voley y tambien cuenta con vestuarios",
+            "category": "servicios",
+            "subcategory": "deportes",
+            "scene_id": poli.id if poli else None
+        },
+        {
+            "content": "En el polideportivo se desarrollan actividades deportivas como eventos y torneos internos.",
             "category": "servicios",
             "subcategory": "deportes",
             "scene_id": poli.id if poli else None
@@ -193,17 +199,59 @@ def seed_knowledge(db: Session):
             "scene_id": pabellon7.id if pabellon7 else None
         },
         {
-            "content": "Tecsup ofrece carreras como Mecatrónica Industrial, Tecnología Digital, Mantenimiento de Maquinaria.",
+            "content": "Tecsup cuenta con Áreas formativas en Electricidad y Electrónica; Gestión y Producción; Mecánica y Avionica; Minería, Procesos químicos y Metalúrgicos; Seguridad y Salud en el trabajo; Tecnología Digital; Mecatrónica; Tecnología Agricola.",
             "category": "carreras",
             "subcategory": None,
             "scene_id": None
         },
         {
-            "content": "Los docentes expertos dentro de tecnologia digital incluyen especialistas en desarrollo de software, redes y ciberseguridad. Como Silvia Montoya y Jaime Gomez",
+            "content": "Tecnología Digital ofrece carreras como Diseño y Desarrollo de Software, Administracion de Redes y Comunicaciones, Big data y Ciencia de datos, Diseño y Desarrollo de Simuladores y Videojuegos, Ciberseguridad y Auditoría Informática.",
             "category": "carreras",
-            "subcategory": "Tecnología digital",
+            "subcategory": None,
             "scene_id": None
-        }
+        },
+        {
+            "content": "Tecnología Digital ofrece carreras como Diseño y Desarrollo de Software, Administracion de Redes y Comunicaciones, Big data y Ciencia de datos, Diseño y Desarrollo de Simuladores y Videojuegos, Ciberseguridad y Auditoría Informática. Todo esto como carrera de 3 años y para carreras de 2 años ofrece Modelado y Animación Digital.",
+            "category": "carreras",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "El campus cuenta con un comedor que ofrece menús variados y nutritivos para estudiantes y personal.",
+            "category": "servicios",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "Se puede visualizar los horarios de clases y actividades académicas a través dentro de la aplicación móvil de Tecsup.",
+            "category": "servicios",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "Puedes visitarnos de lunes a viernes de 8am a 8pm. Los sábados y domingos de 8am a 1pm.",
+            "category": "informacion",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "Nos ubicamos en Santa Anita, Av. Cascanueces 2221, Lima 15011",
+            "category": "informacion",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "Tecsup es una organización educativa privada sin fines de lucro, dedicada a formar y capacitar profesionales, así como brindar servicios de consultoría, investigación y aplicación de tecnología.",
+            "category": "informacion",
+            "subcategory": None,
+            "scene_id": None
+        },
+        {
+            "content": "En 1982 nace la idea de crear TECSUP como la asociacion promotora de institutos tecnológicos superiores con el compromiso de nuestro fundador, Luis Hochshild, y el apoyo de la cooperación internacional e iniciativa privada y estatal.",
+            "category": "informacion",
+            "subcategory": None,
+            "scene_id": None
+        },
     ]
 
     added = 0

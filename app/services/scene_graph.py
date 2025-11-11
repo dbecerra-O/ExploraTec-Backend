@@ -243,10 +243,16 @@ class SceneGraph:
     def resolve_scene_name(query: str, threshold: int = 70) -> Optional[str]:
         """Extraer nombre de escena de la consulta del usuario"""
         query_lower = query.lower()
-        
-        for alias, scene_key in SceneGraph.SCENE_ALIASES.items():
-            if alias in query_lower:
-                return scene_key
+        search_areas = [query_lower]
+        if "desde" in query_lower:
+            before_desde = query_lower.split("desde", 1)[0].strip()
+            if before_desde:
+                search_areas.insert(0, before_desde)
+
+        for area in search_areas:
+            for alias, scene_key in SceneGraph.SCENE_ALIASES.items():
+                if alias in area:
+                    return scene_key
 
         words = query_lower.split()
         
