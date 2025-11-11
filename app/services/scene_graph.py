@@ -1,6 +1,8 @@
 from rapidfuzz import fuzz, process
 from typing import Dict, List, Optional, Tuple
 import heapq
+import unicodedata
+import re
 
 class SceneGraph:
     """Grafo de escenas del campus con conexiones y distancias"""
@@ -237,24 +239,39 @@ class SceneGraph:
                 if neighbor not in visited:
                     heapq.heappush(pq, (dist + weight, neighbor, path + [neighbor]))
         
-        return None  # No hay ruta
+        return None
     
     @staticmethod
     def resolve_scene_name(query: str, threshold: int = 70) -> Optional[str]:
         """Extraer nombre de escena de la consulta del usuario"""
-        query_lower = query.lower()
-        search_areas = [query_lower]
-        if "desde" in query_lower:
-            before_desde = query_lower.split("desde", 1)[0].strip()
+        def _normalize(text: str) -> str:
+            if not text:
+                return ""
+            text = unicodedata.normalize("NFD", text)
+            text = "".join(ch for ch in text if not unicodedata.combining(ch))
+            text = text.lower()
+            text = re.sub(r"[^\w\s]", "", text)
+            text = re.sub(r"\s+", " ", text).strip()
+            return text
+
+        raw_lower = query.lower()
+        search_areas = [raw_lower]
+        if "desde" in raw_lower:
+            before_desde = raw_lower.split("desde", 1)[0].strip()
             if before_desde:
                 search_areas.insert(0, before_desde)
 
-        for area in search_areas:
-            for alias, scene_key in SceneGraph.SCENE_ALIASES.items():
-                if alias in area:
-                    return scene_key
+        normalized_alias_map = { _normalize(alias): alias for alias in SceneGraph.SCENE_ALIASES.keys() }
 
-        words = query_lower.split()
+        for area in search_areas:
+            norm_area = _normalize(area)
+            for norm_alias, alias in normalized_alias_map.items():
+                if not norm_alias:
+                    continue
+                if norm_alias in norm_area:
+                    return SceneGraph.SCENE_ALIASES[alias]
+
+        words = _normalize(raw_lower).split()
         
         best_match = None
         best_adjusted_score = 0
@@ -262,22 +279,21 @@ class SceneGraph:
         
         for word in words:
             
-            if len(word) < 4:
+            if len(word) < 3:
                 continue
-            # Comparar cada palabra con los aliases
             result = process.extractOne(
                 word,
-                SceneGraph.SCENE_ALIASES.keys(),
+                list(normalized_alias_map.keys()),
                 scorer=fuzz.ratio,
                 score_cutoff=threshold
             )
             
             if result:
-                alias, raw_score, _ = result
+                norm_alias, raw_score, _ = result
+                alias = normalized_alias_map.get(norm_alias, norm_alias)
                 
-                # CLAVE: Penalizar diferencias grandes de longitud
                 word_len = len(word)
-                alias_len = len(alias)
+                alias_len = len(norm_alias)
                 length_ratio = min(word_len, alias_len) / max(word_len, alias_len)
                 
                 adjusted_score = raw_score * length_ratio
@@ -288,7 +304,6 @@ class SceneGraph:
                     best_word = word
                     print(f"🔍 '{word}' → '{alias}': raw={raw_score}, len_ratio={length_ratio:.2f}, adjusted={adjusted_score:.1f}")
             
-        # Requerir score ajustado mínimo de 60
         if best_match and best_adjusted_score >= 60:
             print(f"✅ Match final: '{best_word}' → '{best_match}' (score ajustado: {best_adjusted_score:.1f})")
             return SceneGraph.SCENE_ALIASES[best_match]
