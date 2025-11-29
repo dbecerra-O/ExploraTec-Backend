@@ -4,7 +4,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, case
 
 from app.database import get_db
 from app.models.user import User
@@ -125,7 +125,7 @@ async def send_message(
     
     # Crear mensaje del asistente
     assistant_message = message_crud.create_assistant_message(
-        db, bot_response, conversation.id, None, tokens_used
+        db, bot_response, conversation.id, message.scene_context, tokens_used
     )
 
     # Obtener scene_id desde scene_context si existe
@@ -546,5 +546,101 @@ async def get_all_messages_admin(
                 "created_at": msg[0].created_at
             }
             for msg in messages
+        ]
+    }
+
+
+@router.get("/admin/analytics/feedback-overview")
+async def get_feedback_overview(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """KPIs generales sobre feedback (likes/dislikes)"""
+    # Compute using MessageFeedback model
+    from app.models.chat import MessageFeedback
+    total = db.query(MessageFeedback).count()
+    positive = db.query(MessageFeedback).filter(MessageFeedback.is_positive == True).count()
+    negative = db.query(MessageFeedback).filter(MessageFeedback.is_positive == False).count()
+    positive_rate = round((positive / total * 100), 2) if total > 0 else 0.0
+
+    return {
+        "total_feedbacks": total,
+        "positive_feedbacks": positive,
+        "negative_feedbacks": negative,
+        "positive_rate_percent": positive_rate
+    }
+
+
+@router.get("/admin/analytics/feedback-by-scene")
+async def get_feedback_by_scene(
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """KPIs: número de feedbacks por escena y tasa positiva por escena"""
+    from app.models.chat import MessageFeedback, Message
+    from app.models.scene import Scene
+
+    rows = db.query(
+        Scene.id.label('scene_id'),
+        Scene.scene_key,
+        Scene.name,
+        func.count(MessageFeedback.id).label('total'),
+        func.sum(case((MessageFeedback.is_positive == True, 1), else_=0)).label('positive')
+    ).join(Message, Message.id == MessageFeedback.message_id).join(Scene, Scene.id == Message.scene_context_id).group_by(Scene.id, Scene.scene_key, Scene.name).order_by(func.count(MessageFeedback.id).desc()).all()
+
+    result = []
+    for scene_id, scene_key, scene_name, total, positive in rows:
+        positive = int(positive or 0)
+        total = int(total or 0)
+        rate = round((positive / total * 100), 2) if total > 0 else 0.0
+        result.append({
+            "scene_id": int(scene_id),
+            "scene_key": scene_key,
+            "scene_name": scene_name,
+            "total_feedbacks": total,
+            "positive_feedbacks": positive,
+            "positive_rate_percent": rate
+        })
+
+    uncategorized_total = db.query(func.count(MessageFeedback.id)).join(Message, Message.id == MessageFeedback.message_id).filter(Message.scene_context_id == None).scalar() or 0
+    uncategorized_positive = db.query(func.count(MessageFeedback.id)).join(Message, Message.id == MessageFeedback.message_id).filter(Message.scene_context_id == None, MessageFeedback.is_positive == True).scalar() or 0
+
+    uncategorized = {
+        "total_feedbacks": int(uncategorized_total),
+        "positive_feedbacks": int(uncategorized_positive),
+        "positive_rate_percent": round((uncategorized_positive / uncategorized_total * 100), 2) if uncategorized_total > 0 else 0.0
+    }
+
+    return {"by_scene": result, "uncategorized": uncategorized}
+
+
+@router.get("/admin/analytics/top-feedback-messages")
+async def get_top_feedback_messages(
+    limit: int = 10,
+    current_admin: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    """Listar mensajes con más feedback (por ejemplo, favorables o desfavorables).
+    Nota: el esquema actual limita un feedback por mensaje. Si cambias eso, esta query funcionará con agregaciones.
+    """
+    from app.models.chat import MessageFeedback, Message
+
+    rows = db.query(
+        Message.id,
+        Message.content,
+        func.count(MessageFeedback.id).label('feedback_count'),
+        func.sum(case((MessageFeedback.is_positive == True, 1), else_=0)).label('positive_count')
+    ).join(MessageFeedback, MessageFeedback.message_id == Message.id).group_by(Message.id, Message.content).order_by(func.count(MessageFeedback.id).desc()).limit(limit).all()
+
+    return {
+        "top_messages": [
+            {
+                "message_id": r.id,
+                "content": r.content,
+                "feedback_count": int(r.feedback_count or 0),
+                "positive_count": int(r.positive_count or 0),
+                "positive_rate_percent": round((int(r.positive_count or 0) / int(r.feedback_count or 1) * 100), 2) if r.feedback_count else 0.0
+            }
+            for r in rows
         ]
     }

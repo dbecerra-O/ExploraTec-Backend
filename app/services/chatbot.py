@@ -305,8 +305,15 @@ def handle_clarification_response(
         intent_result["all_matches"]
     )
     
+    assistant_scene_key = None
+    try:
+        if getattr(user_message, "scene_context", None):
+            assistant_scene_key = user_message.scene_context.scene_key
+    except Exception:
+        assistant_scene_key = None
+
     assistant_message = message_crud.create_assistant_message(
-        db, clarification_msg, conversation.id, None
+        db, clarification_msg, conversation.id, assistant_scene_key
     )
     
     response_time_ms = int((time.time() - start_time) * 1000)
