@@ -104,7 +104,6 @@ async def send_message(
         scene_id=scene_id
     )
 
-    # retrieved_context is now possibly a dict: {"text": str|None, "events": list|None}
     retrieved_context_text = None
     retrieved_events = None
     if isinstance(retrieved_context, dict):

@@ -17,6 +17,8 @@ class EventCRUD:
             event_date=event.event_date,
             location=event.location,
             scene_id=event.scene_id,
+            modalidad=getattr(event, 'modalidad', None),
+            link=getattr(event, 'link', None),
             is_active=True
         )
         db.add(db_event)

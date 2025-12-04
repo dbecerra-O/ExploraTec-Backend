@@ -76,7 +76,7 @@ def seed_basic_scenes(db: Session):
 
 
 def seed_events(db: Session):
-    """Crear 4 eventos de ejemplo y asociarlos a escenas relevantes."""
+    """Crear eventos de ejemplo con modalidad (virtual/presencial) y enlaces."""
     logger.info("Creando eventos de ejemplo...")
     try:
         events_data = [
@@ -85,35 +85,54 @@ def seed_events(db: Session):
                 "description": "Feria con proyectos estudiantiles y demostraciones.",
                 "event_date": datetime.now() + timedelta(days=7),
                 "location": "Pabellón 4",
-                "scene_key": "24-pabellon-4"
+                "scene_key": "24-pabellon-4",
+                "modalidad": "presencial",
+                "link": None
             },
             {
-                "title": "Charla de Admisiones",
-                "description": "Información sobre carreras y proceso de admisión.",
+                "title": "Charla de Admisiones Online",
+                "description": "Información sobre carreras y proceso de admisión vía virtual.",
                 "event_date": datetime.now() + timedelta(days=14),
-                "location": "Biblioteca",
-                "scene_key": "26-biblioteca"
+                "location": None,
+                "scene_key": "26-biblioteca",
+                "modalidad": "virtual",
+                "link": "https://meet.google.com/abc-defg-hij"
             },
             {
                 "title": "Feria de Libros",
                 "description": "Compra y renta de libros académicos y de interés general.",
                 "event_date": datetime.now() + timedelta(days=7),
                 "location": "Biblioteca",
-                "scene_key": "26-biblioteca"
+                "scene_key": "26-biblioteca",
+                "modalidad": "presencial",
+                "link": None
             },
             {
                 "title": "Taller de Robótica",
                 "description": "Taller práctico para introducir robótica educativa.",
                 "event_date": datetime.now() + timedelta(days=10),
                 "location": "Área de Tecnología",
-                "scene_key": "7-area-de-tecnologia"
+                "scene_key": "7-area-de-tecnologia",
+                "modalidad": "presencial",
+                "link": None
             },
             {
                 "title": "Concierto de Bienvenida",
                 "description": "Evento musical para dar la bienvenida a los nuevos alumnos.",
                 "event_date": datetime.now() + timedelta(days=3),
                 "location": "Patio Central",
-                "scene_key": "1-patio-central"
+                "scene_key": "1-patio-central",
+                "modalidad": "presencial",
+                "link": None
+            },
+            {
+                "title": "Seminario Python Avanzado",
+                "description": "Aprende técnicas avanzadas de Python con expertos del campus.",
+                "event_date": datetime.now() + timedelta(days=5),
+                "location": None,
+                "scene_key": None,
+                "modalidad": "virtual",
+                "link": "https://zoom.us/j/9876543210"
             }
         ]
 
@@ -125,7 +144,9 @@ def seed_events(db: Session):
                 description=ev.get("description"),
                 event_date=ev["event_date"],
                 location=ev.get("location"),
-                scene_id=scene.id if scene else None
+                scene_id=scene.id if scene else None,
+                modalidad=ev.get("modalidad"),
+                link=ev.get("link")
             )
             try:
                 event_crud.create_event(db, ev_create)

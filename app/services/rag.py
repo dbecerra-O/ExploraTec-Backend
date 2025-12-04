@@ -206,23 +206,32 @@ def format_retrieved_passages(passages: List[Dict], max_chars_each: int = 800) -
     return "\n\n".join(parts)
 
 def search_events(db: Session, query: str, scene_id: Optional[int] = None) -> List[Any]:
-    """Busca eventos relevantes basados en la consulta"""
+    """Busca eventos relevantes basados en la consulta, incluyendo modalidad (virtual/presencial)"""
     try:
         from datetime import datetime
         search_terms = (query or "").lower().split()
+        
+        modalidad_filter = None
+        if any(term in search_terms for term in ["virtual", "virtuales", "online"]):
+            modalidad_filter = "virtual"
+        elif any(term in search_terms for term in ["presencial", "presenciales", "en-persona", "en persona"]):
+            modalidad_filter = "presencial"
 
-        query_ev = db.query(Event).filter(
-            Event.is_active == True,
-            Event.scene_id == scene_id
-        ) if scene_id is not None else db.query(Event).filter(Event.is_active == True)
+        query_ev = db.query(Event).filter(Event.is_active == True)
+        
+        if modalidad_filter:
+            query_ev = query_ev.filter(Event.modalidad == modalidad_filter)
 
         events_all = query_ev.all()
 
         events_found = []
         for event in events_all:
-            event_text = f"{event.title or ''} {event.description or ''} {event.location or ''}".lower()
+            # Buscar en título, descripción, modalidad y ubicación
+            event_text = f"{event.title or ''} {event.description or ''} {event.location or ''} {event.modalidad or ''}".lower()
             matches = sum(1 for term in search_terms if term in event_text) if search_terms else 0
             events_found.append((event, matches))
+        
+        # Ordenar por relevancia (matches) y luego por fecha más próxima
         events_found.sort(key=lambda x: ( -x[1], abs((x[0].event_date - _dt.now()).total_seconds()) if x[0].event_date else 1e9 ))
 
         # Devolver hasta 5 candidatos relevantes
@@ -238,24 +247,12 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
     - una versión formateada en 'text' pensada para inyectar en el prompt de la IA
     - una lista cruda en 'events' con campos JSON-friendly para el frontend
 
-    Prioriza eventos de la escena; si no hay eventos y la query sugiere 'global', buscará globalmente.
+    NOTA: Busca eventos globalmente del campus, sin restringir por escena, porque los eventos
+    son recursos globales que el usuario puede querer conocer desde cualquier ubicación.
     """
     try:
-        q_lower = (query or "").lower()
-        global_indicators = ["en general", "en todo", "en el campus", "todo el campus", "en general del campus", "por todo el campus", "en todas"]
-        allow_global = any(token in q_lower for token in global_indicators)
-
-        # Buscar por escena primero
-        events = search_events(db, query, scene_id)
-
-        if not events and allow_global:
-            from datetime import datetime
-            global_events = db.query(Event).filter(
-                Event.is_active == True,
-                Event.event_date >= datetime.now(),
-                Event.scene_id.is_(None)
-            ).order_by(Event.event_date).limit(3).all()
-            events = global_events
+        # Buscar eventos relevantes para la consulta (sin restricción de escena)
+        events = search_events(db, query, scene_id=None)
 
         if not events:
             return None
@@ -277,6 +274,8 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
                 "location": getattr(ev, "location", None),
                 "scene_id": getattr(ev, "scene_id", None),
                 "is_active": getattr(ev, "is_active", None),
+                "modalidad": getattr(ev, "modalidad", None),
+                "link": getattr(ev, "link", None),
                 "status": "upcoming" if is_upcoming else "past"
             })
             if is_upcoming:
@@ -290,7 +289,14 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
             part = "📅 Eventos próximos:\n\n"
             for event in upcoming[:5]:
                 ev_date = event.event_date
-                part += f"• {event.title} — {event.location or 'Ubicación por definir'} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
+                modality = getattr(event, "modalidad", None)
+                link = getattr(event, "link", None)
+                if modality and modality.lower() == "virtual":
+                    location_or_link = f"(Virtual) Enlace: {link or 'por definir'}"
+                else:
+                    location_or_link = event.location or 'Ubicación por definir'
+
+                part += f"• {event.title} — {location_or_link} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
                 if event.description:
                     part += f"  {event.description[:200]}\n"
             events_text_parts.append(part.strip())
@@ -299,7 +305,14 @@ def search_events_context(db: Session, query: str, scene_id: Optional[int] = Non
             part = "📜 Eventos pasados:\n\n"
             for event in past[:5]:
                 ev_date = event.event_date
-                part += f"• {event.title} — {event.location or 'Ubicación por definir'} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
+                modality = getattr(event, "modalidad", None)
+                link = getattr(event, "link", None)
+                if modality and modality.lower() == "virtual":
+                    location_or_link = f"(Virtual) Enlace: {link or 'por definir'}"
+                else:
+                    location_or_link = event.location or 'Ubicación por definir'
+
+                part += f"• {event.title} — {location_or_link} — {ev_date.strftime('%d/%m/%Y %H:%M') if ev_date else 'Fecha por definir'}\n"
             events_text_parts.append(part.strip())
 
         events_text = "\n\n".join(events_text_parts) if events_text_parts else None

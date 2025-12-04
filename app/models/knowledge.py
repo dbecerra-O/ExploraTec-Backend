@@ -37,6 +37,8 @@ class Event(Base):
     event_date = Column(DateTime, nullable=False)
     location = Column(String(200))
     scene_id = Column(Integer, ForeignKey("scenes.id"))
+    modalidad = Column(String(50), nullable=True)
+    link = Column(String(1000), nullable=True)
     
     # Para búsqueda
     embedding = Column(Vector(1536))
@@ -44,3 +46,6 @@ class Event(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     scene = relationship("Scene")
+
+    def __repr__(self):
+        return f"<Event(id={self.id}, title='{self.title}', date={self.event_date}, modalidad={self.modalidad})>"
